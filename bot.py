@@ -109,25 +109,26 @@ async def cleanup_old_files():
 
 # ==================== LOG BOT HANDLERS & DASHBOARD ====================
 
-def get_log_bot_menu() -> ReplyKeyboardMarkup:
-    """Admin dashboard keyboard for Log Bot."""
-    return ReplyKeyboardMarkup(
-        keyboard=[
+def get_log_bot_inline_menu() -> InlineKeyboardMarkup:
+    """Big clear inline buttons for Log Bot dashboard."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
             [
-                KeyboardButton(text="📊 Jonli Statistika"),
-                KeyboardButton(text="👥 Foydalanuvchilar Ro'yxati")
+                InlineKeyboardButton(text="📊 Jonli Statistika & Reyting", callback_data="log_stats")
             ],
             [
-                KeyboardButton(text="📢 Barchaga Xabar Yuborish")
+                InlineKeyboardButton(text="👥 Foydalanuvchilar Ro'yxati (15 ta)", callback_data="log_users")
+            ],
+            [
+                InlineKeyboardButton(text="📢 Barchaga Xabar Yuborish", callback_data="log_broadcast_info")
             ]
-        ],
-        resize_keyboard=True
+        ]
     )
 
 
 @log_dp.message(CommandStart())
 async def log_cmd_start(message: Message):
-    """Log bot start command."""
+    """Log bot start command with inline dashboard."""
     user_id = message.from_user.id if message.from_user else 0
     name = message.from_user.first_name if message.from_user else "Xo'jayin"
 
@@ -136,14 +137,14 @@ async def log_cmd_start(message: Message):
         f"👑 <b>Assalomu alaykum, {name}!</b>\n\n"
         "🕵️‍♂️ <b>Sizning shaxsiy Admin & Log Botingiz tayyor!</b>\n\n"
         "Asosiy botdagi barcha yangi kirganlar, ovozlar va statistika shu yerda ko'rinadi.\n\n"
-        "Pastdagi tugmalar orqali to'liq tahlilni ko'rishingiz mumkin:"
+        "👇 <b>Kerakli bo'limni tanlang:</b>"
     )
-    await message.answer(text, reply_markup=get_log_bot_menu(), parse_mode=ParseMode.HTML)
+    await message.answer(text, reply_markup=get_log_bot_inline_menu(), parse_mode=ParseMode.HTML)
 
 
-@log_dp.message(F.text == "📊 Jonli Statistika")
+@log_dp.callback_query(F.data == "log_stats")
 @log_dp.message(Command("stats"))
-async def log_show_stats(message: Message):
+async def log_show_stats_cb(event, bot: Bot):
     """Detailed live stats."""
     stats = get_detailed_statistics()
 
@@ -164,16 +165,26 @@ async def log_show_stats(message: Message):
         f"{top_text}\n"
         f"🕒 <i>Yangilangan vaqt: {datetime.now().strftime('%H:%M:%S (%d/%m/%Y)')}</i>"
     )
-    await message.answer(text, reply_markup=get_log_bot_menu(), parse_mode=ParseMode.HTML)
+
+    if isinstance(event, CallbackQuery):
+        await event.message.edit_text(text, reply_markup=get_log_bot_inline_menu(), parse_mode=ParseMode.HTML)
+        await event.answer()
+    else:
+        await event.answer(text, reply_markup=get_log_bot_inline_menu(), parse_mode=ParseMode.HTML)
 
 
-@log_dp.message(F.text == "👥 Foydalanuvchilar Ro'yxati")
+@log_dp.callback_query(F.data == "log_users")
 @log_dp.message(Command("users"))
-async def log_show_users(message: Message):
+async def log_show_users_cb(event, bot: Bot):
     """Shows full list of recent users."""
     users = get_recent_users(15)
     if not users:
-        await message.answer("👥 Hozircha foydalanuvchilar mavjud emas.")
+        msg = "👥 Hozircha foydalanuvchilar mavjud emas."
+        if isinstance(event, CallbackQuery):
+            await event.message.edit_text(msg, reply_markup=get_log_bot_inline_menu(), parse_mode=ParseMode.HTML)
+            await event.answer()
+        else:
+            await event.answer(msg, reply_markup=get_log_bot_inline_menu(), parse_mode=ParseMode.HTML)
         return
 
     text = "👥 <b>OXIRGI FOYDALANUVCHILAR RO'YXATI (15 ta):</b>\n\n"
@@ -188,18 +199,24 @@ async def log_show_users(message: Message):
             f"   🕒 Oxirgi faollik: <i>{dt}</i>\n\n"
         )
 
-    await message.answer(text, reply_markup=get_log_bot_menu(), parse_mode=ParseMode.HTML)
+    if isinstance(event, CallbackQuery):
+        await event.message.edit_text(text, reply_markup=get_log_bot_inline_menu(), parse_mode=ParseMode.HTML)
+        await event.answer()
+    else:
+        await event.answer(text, reply_markup=get_log_bot_inline_menu(), parse_mode=ParseMode.HTML)
 
 
-@log_dp.message(F.text == "📢 Barchaga Xabar Yuborish")
-async def log_send_info(message: Message):
+@log_dp.callback_query(F.data == "log_broadcast_info")
+async def log_broadcast_info_cb(callback: CallbackQuery):
     """Help for broadcast."""
     text = (
-        "📢 <b>Barcha foydalanuvchilarga xabar tarqatish uchun:</b>\n\n"
-        "Menga quyidagi buyruq bilan matn yuboring:\n"
-        "<code>/send Salom hammaga! Botda yangi Gollivud effektlari chiqdi!</code>"
+        "📢 <b>Barcha foydalanuvchilarga xabar tarqatish:</b>\n\n"
+        "Shu botga quyidagi formatda xabar yozing:\n"
+        "<code>/send Salom hammaga! Botda yangi Gollivud ovozlari chiqdi!</code>\n\n"
+        "Bot asosiy botdagi barcha do'stlaringizga bu xabarni yetkazadi!"
     )
-    await message.answer(text, parse_mode=ParseMode.HTML)
+    await callback.message.edit_text(text, reply_markup=get_log_bot_inline_menu(), parse_mode=ParseMode.HTML)
+    await callback.answer()
 
 
 @log_dp.message(Command("send"))
