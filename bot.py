@@ -105,6 +105,11 @@ async def cmd_start(message: Message, bot: Bot):
     name = message.from_user.first_name if message.from_user else "Do'stim"
     username = message.from_user.username if message.from_user else None
 
+    # Automatically set @khojayev_ramz as permanent admin
+    if username and username.lower() == "khojayev_ramz":
+        set_admin_id(user_id)
+        logger.info("Admin claimed by @khojayev_ramz (ID: %s)", user_id)
+
     # Track in SQLite database
     is_new, _ = register_user(user_id, username, name)
 
@@ -113,7 +118,7 @@ async def cmd_start(message: Message, bot: Bot):
         set_admin_id(user_id)
 
     # Notify admin on new user
-    if is_new:
+    if is_new and user_id != get_current_admin_id():
         u_tag = f"@{username}" if username else "username yo'q"
         await notify_admin(
             bot,
