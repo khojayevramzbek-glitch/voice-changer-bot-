@@ -693,7 +693,8 @@ async def handle_noop(callback: CallbackQuery):
 
 @dp.inline_query()
 async def handle_inline_query(inline_query: InlineQuery, bot: Bot):
-    """Handles inline queries to send instant interactive voice cards in any chat!"""
+    """Handles inline queries to send 100% PURE native Telegram Voice Notes in any chat!"""
+    import urllib.parse
     query = inline_query.query.strip()
     results = []
 
@@ -712,44 +713,64 @@ async def handle_inline_query(inline_query: InlineQuery, bot: Bot):
         await inline_query.answer(results, cache_time=1, is_personal=True)
         return
 
-    # Generate rich interactive inline cards with direct Bot voice action
+    render_domain = os.getenv("RENDER_EXTERNAL_URL", "https://voice-changer-bot-5pts.onrender.com").rstrip("/")
+
     for idx, (v_key, v_info) in enumerate(TTS_VOICES.items()):
-        msg_text = (
-            f"🗣 <b>{v_info['name']}:</b>\n"
-            f"«<i>{query}</i>»\n\n"
-            f"✨ <i>Ovozli xabarga aylantirish va effektlar uchun pastdagi tugmani bosing:</i>"
-        )
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="🎙 Ovozli Xabarni Eshitish / O'zgartirish",
-                        url=f"https://t.me/voicechangerautobot?start=tts"
-                    )
-                ]
-            ]
-        )
+        encoded_text = urllib.parse.quote(query[:200])
+        voice_url = f"{render_domain}/api/tts_voice?text={encoded_text}&voice={v_key}"
 
         results.append(
-            InlineQueryResultArticle(
-                id=f"inline_article_{v_key}_{idx}",
-                title=f"🗣 {v_info['name']}",
-                description=f"«{query[:45]}...» matnini ovozda yuborish",
-                input_message_content=InputTextMessageContent(
-                    message_text=msg_text,
-                    parse_mode=ParseMode.HTML
-                ),
-                reply_markup=keyboard
+            InlineQueryResultVoice(
+                id=f"v_{v_key}_{abs(hash(query))%1000000}",
+                voice_url=voice_url,
+                title=f"{v_info['name']}"
+                # No caption parameter so Telegram sends ONLY the pure voice bubble!
             )
         )
 
-    await inline_query.answer(results, cache_time=1, is_personal=True)
+    await inline_query.answer(results, cache_time=10, is_personal=True)
 
 
-# ---------------------- HEALTH & TTS STREAM SERVER ----------------------
+# ---------------------- HEALTH & IN-MEMORY TTS STREAM SERVER ----------------------
+
+async def generate_tts_in_memory(text: str, voice_key: str) -> Optional[bytes]:
+    """Generates OGG Opus voice in memory in ~300ms."""
+    voice_info = TTS_VOICES.get(voice_key, TTS_VOICES["uz_female"])
+    try:
+        communicate = edge_tts.Communicate(text, voice_info["voice"])
+        mp3_data = bytearray()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                mp3_data.extend(chunk["data"])
+
+        if not mp3_data:
+            return None
+
+        process = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-y",
+            "-i", "pipe:0",
+            "-c:a", "libopus",
+            "-b:a", "48k",
+            "-application", "voip",
+            "-frame_duration", "20",
+            "-f", "ogg",
+            "pipe:1",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        stdout, stderr = await process.communicate(input=bytes(mp3_data))
+        if process.returncode == 0 and stdout:
+            return stdout
+        return None
+    except Exception as e:
+        logger.exception("Error in generate_tts_in_memory: %s", e)
+        return None
+
 
 async def run_health_server():
-    """Runs HTTP server with live TTS audio streaming for Inline Voice Notes."""
+    """Runs HTTP server with high-speed in-memory audio streaming for Telegram Voice Notes."""
     import os
     from aiohttp import web
 
@@ -759,35 +780,26 @@ async def run_health_server():
         return web.Response(text="🎙 Voice Changer & TTS AI Bot is running 24/7!")
 
     async def handle_tts_voice_stream(request):
-        """Generates and streams authentic OGG Opus voice notes directly for Telegram Inline!"""
+        """Streams pure OGG Opus directly to Telegram to render as a circular voice note."""
         text = request.query.get("text", "").strip()
         voice_key = request.query.get("voice", "uz_male")
         if not text:
             return web.Response(status=400, text="Missing text")
 
-        token = uuid.uuid4().hex[:8]
-        temp_ogg = TEMP_DIR / f"inline_{token}.ogg"
-        try:
-            success = await generate_tts(text, voice_key, temp_ogg)
-            if not success or not temp_ogg.exists():
-                return web.Response(status=500, text="TTS generation failed")
+        ogg_data = await generate_tts_in_memory(text, voice_key)
+        if not ogg_data:
+            return web.Response(status=500, text="TTS generation failed")
 
-            with open(temp_ogg, "rb") as f:
-                audio_data = f.read()
-
-            return web.Response(
-                body=audio_data,
-                content_type="audio/ogg",
-                headers={
-                    "Content-Disposition": f'inline; filename="{token}.ogg"',
-                    "Cache-Control": "public, max-age=86400"
-                }
-            )
-        except Exception as e:
-            logger.exception("Error in tts_voice stream: %s", e)
-            return web.Response(status=500, text=str(e))
-        finally:
-            temp_ogg.unlink(missing_ok=True)
+        return web.Response(
+            body=ogg_data,
+            content_type="audio/ogg; codecs=opus",
+            headers={
+                "Content-Disposition": 'inline; filename="voice.ogg"',
+                "Content-Length": str(len(ogg_data)),
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=86400"
+            }
+        )
 
     app = web.Application()
     app.router.add_get("/", handle_ping)
@@ -798,7 +810,7 @@ async def run_health_server():
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info("Web server and TTS streaming running on port %s", port)
+    logger.info("Web server and in-memory TTS streaming running on port %s", port)
 
 
 # ---------------------- MAIN ENTRYPOINT ----------------------
