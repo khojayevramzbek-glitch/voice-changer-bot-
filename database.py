@@ -13,10 +13,16 @@ def get_now_uz() -> datetime:
     return datetime.now(timezone.utc).astimezone(UZ_TZ)
 
 
+def get_db():
+    return sqlite3.connect(DB_PATH)
+
+
 def init_db():
     """Initializes SQLite database tables."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
+
+    # Users table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
@@ -25,9 +31,12 @@ def init_db():
             joined_at REAL,
             last_active REAL,
             voice_count INTEGER DEFAULT 0,
-            tts_count INTEGER DEFAULT 0
+            tts_count INTEGER DEFAULT 0,
+            lang TEXT DEFAULT 'uz'
         )
     """)
+
+    # Usage logs table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS usage_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,12 +46,29 @@ def init_db():
             created_at REAL
         )
     """)
+
+    # Persistent storage for audio & text tokens so buttons NEVER expire across restarts
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS persistent_tokens (
+            token TEXT PRIMARY KEY,
+            token_type TEXT,
+            user_id INTEGER,
+            data_json TEXT,
+            created_at REAL
+        )
+    """)
+
+    # Bot settings / admin storage
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
         )
     """)
+
+    # Set default admin ID
+    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('admin_id', '8594505572')")
+
     conn.commit()
     conn.close()
 
@@ -188,6 +214,33 @@ def set_admin_id(admin_id: int):
     cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_id', ?)", (str(admin_id),))
     conn.commit()
     conn.close()
+
+
+def save_token_data(token: str, token_type: str, user_id: int, data: dict):
+    """Saves session token to SQLite so buttons never expire."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO persistent_tokens (token, token_type, user_id, data_json, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (token, token_type, user_id, json.dumps(data), time.time()))
+    conn.commit()
+    conn.close()
+
+
+def get_token_data(token: str) -> Optional[dict]:
+    """Retrieves session token data from SQLite."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT data_json FROM persistent_tokens WHERE token = ?", (token,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        try:
+            return json.loads(row[0])
+        except Exception:
+            return None
+    return None
 
 
 def get_admin_id() -> Optional[int]:
