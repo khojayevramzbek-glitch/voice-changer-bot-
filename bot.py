@@ -2,7 +2,7 @@ import asyncio
 import logging
 import sys
 import uuid
-import shutil
+import time
 from pathlib import Path
 from typing import Dict
 
@@ -17,12 +17,24 @@ if sys.platform == "win32":
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.types import (
+    Message, CallbackQuery, FSInputFile,
+    InlineQuery, InlineQueryResultVoice, InlineQueryResultArticle,
+    InputTextMessageContent
+)
 from aiogram.client.default import DefaultBotProperties
 
 from config import BOT_TOKEN, TEMP_DIR
-from audio_processor import apply_voice_effect, VOICE_EFFECTS
-from keyboards import get_voice_effects_keyboard, get_after_effect_keyboard
+from audio_processor import (
+    apply_voice_effect, apply_ambience_effect, generate_tts,
+    VOICE_EFFECTS, AMBIENCE_EFFECTS, TTS_VOICES
+)
+from locales import get_user_lang, set_user_lang, t
+from keyboards import (
+    get_main_menu_keyboard, get_voice_effects_keyboard,
+    get_ambience_keyboard, get_tts_keyboard,
+    get_after_effect_keyboard, get_language_keyboard
+)
 
 # Configure logging
 logging.basicConfig(
@@ -31,29 +43,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger("VoiceChangerBot")
 
-# In-memory mapping of file_token -> stored file information
-# Structure: { file_token: { "path": Path, "user_id": int, "created_at": float } }
+# In-memory storage for pending audio and text sessions
 AUDIO_STORAGE: Dict[str, dict] = {}
+TEXT_STORAGE: Dict[str, dict] = {}
 
 
 async def cleanup_old_files():
-    """Periodically cleans up files older than 30 minutes."""
+    """Periodically removes files and sessions older than 30 minutes."""
     while True:
         try:
-            await asyncio.sleep(600)  # Check every 10 minutes
-            import time
+            await asyncio.sleep(600)
             now = time.time()
-            expired_tokens = []
-            for token, data in list(AUDIO_STORAGE.items()):
-                if now - data.get("created_at", now) > 1800:
-                    expired_tokens.append(token)
-                    try:
-                        if data["path"].exists():
-                            data["path"].unlink(missing_ok=True)
-                    except Exception as e:
-                        logger.error("Error deleting file %s: %s", data["path"], e)
-            for token in expired_tokens:
-                AUDIO_STORAGE.pop(token, None)
+            for storage in (AUDIO_STORAGE, TEXT_STORAGE):
+                expired_tokens = []
+                for token, data in list(storage.items()):
+                    if now - data.get("created_at", now) > 1800:
+                        expired_tokens.append(token)
+                        if "path" in data and data["path"].exists():
+                            try:
+                                data["path"].unlink(missing_ok=True)
+                            except Exception:
+                                pass
+                for token in expired_tokens:
+                    storage.pop(token, None)
         except Exception as e:
             logger.error("Error in cleanup task: %s", e)
 
@@ -61,120 +73,213 @@ async def cleanup_old_files():
 dp = Dispatcher()
 
 
+# ---------------------- COMMAND HANDLERS ----------------------
+
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
-    """Handles /start command with an introduction and guide."""
-    user_name = message.from_user.first_name if message.from_user else "Do'stim"
-    text = (
-        f"👋 <b>Assalomu alaykum, {user_name}!</b>\n\n"
-        "🎙 <b>Voice Changer Bot</b>ga xush kelibsiz!\n\n"
-        "Men siz yuborgan har qanday <b>ovozli xabar (voice)</b> yoki audio faylni turli xil qiziqarli ovozlarga o'zgartirib beraman!\n\n"
-        "🔥 <b>Mavjud ovoz effektlari:</b>\n"
-        "• 🐿 <b>Chipmunk</b> — Kulgili sincap ovozi\n"
-        "• 👽 <b>Alien</b> — O'zga sayyoralik\n"
-        "• 🤖 <b>Robot</b> — Mexanik kiborg ovozi\n"
-        "• 👹 <b>Monster</b> — Chuqur qalin maxluq ovozi\n"
-        "• 🎈 <b>Geliy gazi</b> — O'ta ingichka geliy ovozi\n"
-        "• 🏔 <b>Aks-sado (Echo)</b> — G'or effekti\n"
-        "• 📻 <b>Ratsiya</b> — Politsiya/harbiy ratsiyasi\n"
-        "• ☎️ <b>Eski telefon</b> — 90-yillar qo'ng'irog'i\n"
-        "• ⚡ <b>Tezlashtirish</b> / 🐢 <b>Sekinlashtirish</b>\n"
-        "• 🔄 <b>Orqaga (Reverse)</b> & 🎧 <b>8D Ovoz</b>\n\n"
-        "🚀 <b>Boshlash uchun:</b> Menga shunchaki <b>ovozli xabar (voice)</b> yoki audio yuboring!"
+    """Start command handler with main menu and greetings."""
+    user_id = message.from_user.id if message.from_user else 0
+    name = message.from_user.first_name if message.from_user else "Do'stim"
+
+    # Default language based on user's Telegram language code
+    if message.from_user and message.from_user.language_code:
+        lang_code = message.from_user.language_code[:2].lower()
+        if lang_code in ("ru", "en"):
+            set_user_lang(user_id, lang_code)
+
+    title = t(user_id, "start_title", name=name)
+    desc = t(user_id, "start_desc")
+    full_text = f"{title}\n\n{desc}"
+
+    await message.answer(
+        full_text,
+        reply_markup=get_main_menu_keyboard(user_id),
+        parse_mode=ParseMode.HTML
     )
-    await message.answer(text, parse_mode=ParseMode.HTML)
 
 
 @dp.message(Command("help"))
-@dp.message(Command("effects"))
+@dp.message(F.text.in_(["ℹ️ Yordam", "ℹ️ Помощь", "ℹ️ Help"]))
 async def cmd_help(message: Message):
-    """Lists and explains all voice effects."""
-    effects_list = "\n".join(
-        [f"• <b>{eff['name']}</b>: <i>{eff['description']}</i>" for eff in VOICE_EFFECTS.values()]
-    )
-    text = (
-        "🎭 <b>Barcha mavjud ovoz effektlari:</b>\n\n"
-        f"{effects_list}\n\n"
-        "🎙 <i>Sinab ko'rish uchun hoziroq ovozli xabar yuboring!</i>"
-    )
-    await message.answer(text, parse_mode=ParseMode.HTML)
+    """Help command handler."""
+    user_id = message.from_user.id if message.from_user else 0
+    title = t(user_id, "help_title")
+    text = t(user_id, "help_text")
+    await message.answer(f"{title}\n\n{text}", parse_mode=ParseMode.HTML)
 
+
+@dp.message(Command("lang"))
+@dp.message(F.text.in_(["🌐 Tilni O'zgartirish", "🌐 Сменить язык", "🌐 Change Language"]))
+async def cmd_language(message: Message):
+    """Language switcher menu."""
+    user_id = message.from_user.id if message.from_user else 0
+    await message.answer(
+        t(user_id, "lang_choose"),
+        reply_markup=get_language_keyboard(),
+        parse_mode=ParseMode.HTML
+    )
+
+
+@dp.message(F.text.in_(["✍️ Matndan Ovozga (TTS)", "✍️ Озвучка текста (TTS)", "✍️ Text-to-Speech"]))
+async def cmd_tts_info(message: Message):
+    """Prompt user to send text for Text-to-Speech."""
+    user_id = message.from_user.id if message.from_user else 0
+    msg = {
+        "uz": "✍️ <b>Menga istalgan matn yozib yuboring!</b>\n\nMen uni tabiiy sun'iy intellekt ovozida o'qib, turli qiziqarli effektlarga aylantirib beraman.",
+        "ru": "✍️ <b>Напишите мне любой текст!</b>\n\nЯ озвучу его красивым голосом и предложу классные эффекты.",
+        "en": "✍️ <b>Send me any text message!</b>\n\nI will generate realistic speech and apply fun sound effects to it."
+    }
+    lang = get_user_lang(user_id)
+    await message.answer(msg.get(lang, msg["uz"]), parse_mode=ParseMode.HTML)
+
+
+@dp.message(F.text.in_(["🌧 Fon Tovushlari", "🌧 Фоновые звуки", "🌧 Background Sounds"]))
+async def cmd_ambience_info(message: Message):
+    """Info for background ambience sounds."""
+    user_id = message.from_user.id if message.from_user else 0
+    msg = {
+        "uz": "🌧 <b>Fon tovushlarini qo'shish uchun:</b>\nAvval menga ovozli xabar (voice) yuboring, so'ng '🌧 Fon tovushlari' tugmasini bosing!",
+        "ru": "🌧 <b>Чтобы добавить фоновые звуки:</b>\nСначала отправьте голосовое сообщение, затем выберите '🌧 Фоновые звуки'!",
+        "en": "🌧 <b>To mix background sounds:</b>\nSend a voice note first, then select '🌧 Background Sounds'!"
+    }
+    lang = get_user_lang(user_id)
+    await message.answer(msg.get(lang, msg["uz"]), parse_mode=ParseMode.HTML)
+
+
+# ---------------------- VOICE & AUDIO HANDLER ----------------------
 
 @dp.message(F.voice | F.audio | F.video_note)
 async def handle_incoming_voice(message: Message, bot: Bot):
     """Downloads incoming voice/audio and presents effect options."""
-    import time
     user_id = message.from_user.id if message.from_user else 0
     file_token = uuid.uuid4().hex[:10]
 
-    status_msg = await message.reply("📥 <i>Ovozli xabar qabul qilindi, yuklab olinmoqda...</i>", parse_mode=ParseMode.HTML)
+    status_msg = await message.reply(t(user_id, "voice_received"), parse_mode=ParseMode.HTML)
 
     try:
-        # Determine file object
         if message.voice:
             file_id = message.voice.file_id
             ext = ".ogg"
-            source_type = "🎙 Ovozli xabar"
         elif message.audio:
             file_id = message.audio.file_id
             ext = ".mp3"
-            source_type = "🎵 Audio fayl"
         else:
             file_id = message.video_note.file_id
             ext = ".mp4"
-            source_type = "📹 Video xabar"
 
         file = await bot.get_file(file_id)
         if not file.file_path:
-            await status_msg.edit_text("❌ Fayl yuklab olishda xatolik yuz berdi.")
+            await status_msg.edit_text(t(user_id, "error_processing"))
             return
 
         dest_path = TEMP_DIR / f"{file_token}_input{ext}"
         await bot.download_file(file.file_path, destination=dest_path)
 
-        # Store file in memory
         AUDIO_STORAGE[file_token] = {
             "path": dest_path,
             "user_id": user_id,
-            "created_at": time.time(),
-            "source_type": source_type
+            "created_at": time.time()
         }
 
-        keyboard = get_voice_effects_keyboard(file_token)
+        keyboard = get_voice_effects_keyboard(file_token, user_id, page=1)
         await status_msg.edit_text(
-            f"✨ <b>{source_type} tayyor!</b>\n\n"
-            "Qaysi ovoz effektiga o'zgartirmoqchisiz? Quyidagi tugmalardan birini tanlang:",
+            t(user_id, "voice_ready"),
             reply_markup=keyboard,
             parse_mode=ParseMode.HTML
         )
     except Exception as e:
-        logger.exception("Error downloading voice: %s", e)
-        await status_msg.edit_text("❌ Ovozni yuklab olishda xatolik yuz berdi. Iltimos qaytadan urinib ko'ring.")
+        logger.exception("Error downloading audio: %s", e)
+        await status_msg.edit_text(t(user_id, "error_processing"))
+
+
+# ---------------------- TEXT TO SPEECH HANDLER ----------------------
+
+@dp.message(F.text & ~F.text.startswith("/"))
+async def handle_text_input(message: Message):
+    """Handles text input to convert into speech."""
+    user_id = message.from_user.id if message.from_user else 0
+    text_content = message.text.strip()
+
+    if len(text_content) > 500:
+        await message.reply("⚠️ Matn juda uzun. Iltimos, 500 belgidan oshmagan matn yuboring.")
+        return
+
+    text_token = uuid.uuid4().hex[:10]
+    TEXT_STORAGE[text_token] = {
+        "text": text_content,
+        "user_id": user_id,
+        "created_at": time.time()
+    }
+
+    keyboard = get_tts_keyboard(text_token, user_id)
+    await message.reply(
+        f"✍️ <i>«{text_content[:60]}...»</i>\n\n{t(user_id, 'text_received')}",
+        reply_markup=keyboard,
+        parse_mode=ParseMode.HTML
+    )
+
+
+# ---------------------- CALLBACK QUERY HANDLERS ----------------------
+
+@dp.callback_query(F.data.startswith("setlang:"))
+async def handle_set_language(callback: CallbackQuery):
+    """Changes user's interface language."""
+    user_id = callback.from_user.id
+    lang_code = callback.data.split(":")[1]
+    set_user_lang(user_id, lang_code)
+
+    await callback.message.edit_text(
+        t(user_id, "lang_changed"),
+        parse_mode=ParseMode.HTML
+    )
+    await callback.message.answer(
+        t(user_id, "start_desc"),
+        reply_markup=get_main_menu_keyboard(user_id),
+        parse_mode=ParseMode.HTML
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("page:"))
+async def handle_pagination(callback: CallbackQuery):
+    """Handles effect menu pagination."""
+    user_id = callback.from_user.id
+    parts = callback.data.split(":")
+    page = int(parts[1])
+    file_token = parts[2]
+
+    keyboard = get_voice_effects_keyboard(file_token, user_id, page=page)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
+    except Exception:
+        pass
+    await callback.answer()
 
 
 @dp.callback_query(F.data.startswith("fx:"))
 async def handle_effect_callback(callback: CallbackQuery, bot: Bot):
-    """Applies the selected effect and sends the voice note back."""
+    """Applies voice filter and returns transformed voice message."""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
     parts = callback.data.split(":")
-    if len(parts) != 3:
-        await callback.answer("Noto'g'ri so'rov.", show_alert=True)
-        return
+    effect_key, file_token = parts[1], parts[2]
 
-    _, effect_key, file_token = parts
     effect = VOICE_EFFECTS.get(effect_key)
-
     if not effect:
         await callback.answer("Effekt topilmadi.", show_alert=True)
         return
 
     data = AUDIO_STORAGE.get(file_token)
     if not data or not data["path"].exists():
-        await callback.answer("⚠️ Bu ovozli xabar muddati tugagan. Iltimos, yangi ovoz yuboring.", show_alert=True)
+        await callback.answer(t(user_id, "expired"), show_alert=True)
         return
 
-    await callback.answer(f"⏳ {effect['name']} qo'llanmoqda...")
-    processing_msg = await callback.message.reply(
-        f"⚙️ <b>{effect['name']}</b> effekti qo'llanmoqda... Iltimos kuting...",
+    effect_name = effect.get(lang, effect.get("uz"))
+    desc = effect.get(f"desc_{lang}", effect.get("desc_uz"))
+
+    await callback.answer(f"⏳ {effect_name}...")
+    proc_msg = await callback.message.reply(
+        t(user_id, "processing_effect", name=effect_name),
         parse_mode=ParseMode.HTML
     )
 
@@ -183,63 +288,169 @@ async def handle_effect_callback(callback: CallbackQuery, bot: Bot):
     try:
         success = await apply_voice_effect(data["path"], output_path, effect_key)
         if not success or not output_path.exists():
-            await processing_msg.edit_text("❌ Ovozni o'zgartirishda xatolik yuz berdi.")
+            await proc_msg.edit_text(t(user_id, "error_processing"))
             return
 
         bot_info = await bot.get_me()
-        bot_username = bot_info.username or "VoiceChangerBot"
+        bot_username = bot_info.username or "voicechangerautobot"
 
-        voice_file = FSInputFile(output_path)
+        caption = f"✨ <b>Effekt:</b> {effect_name}\n📝 <i>{desc}</i>\n\n🤖 @{bot_username}"
+
+        await callback.message.reply_voice(
+            voice=FSInputFile(output_path),
+            caption=caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_after_effect_keyboard(file_token, user_id)
+        )
+        await proc_msg.delete()
+    except Exception as e:
+        logger.exception("Error in voice effect: %s", e)
+        await proc_msg.edit_text(t(user_id, "error_processing"))
+    finally:
+        output_path.unlink(missing_ok=True)
+
+
+@dp.callback_query(F.data.startswith("amb:"))
+async def handle_ambience_callback(callback: CallbackQuery, bot: Bot):
+    """Mixes ambient sound with voice."""
+    user_id = callback.from_user.id
+    lang = get_user_lang(user_id)
+    parts = callback.data.split(":")
+    amb_key, file_token = parts[1], parts[2]
+
+    amb = AMBIENCE_EFFECTS.get(amb_key)
+    if not amb:
+        await callback.answer("Fon topilmadi.", show_alert=True)
+        return
+
+    data = AUDIO_STORAGE.get(file_token)
+    if not data or not data["path"].exists():
+        await callback.answer(t(user_id, "expired"), show_alert=True)
+        return
+
+    amb_name = amb.get(lang, amb.get("uz"))
+    await callback.answer(f"⏳ {amb_name}...")
+
+    proc_msg = await callback.message.reply(
+        f"🌧 <b>{amb_name}</b> fon tovushi qo'shilmoqda...",
+        parse_mode=ParseMode.HTML
+    )
+
+    output_path = TEMP_DIR / f"{file_token}_{amb_key}.ogg"
+    try:
+        success = await apply_ambience_effect(data["path"], output_path, amb_key)
+        if not success or not output_path.exists():
+            await proc_msg.edit_text(t(user_id, "error_processing"))
+            return
+
+        bot_info = await bot.get_me()
+        bot_username = bot_info.username or "voicechangerautobot"
+
+        caption = f"🌧 <b>Fon:</b> {amb_name}\n\n🤖 @{bot_username}"
+        await callback.message.reply_voice(
+            voice=FSInputFile(output_path),
+            caption=caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_after_effect_keyboard(file_token, user_id)
+        )
+        await proc_msg.delete()
+    except Exception as e:
+        logger.exception("Error in ambience effect: %s", e)
+        await proc_msg.edit_text(t(user_id, "error_processing"))
+    finally:
+        output_path.unlink(missing_ok=True)
+
+
+@dp.callback_query(F.data.startswith("tts:"))
+async def handle_tts_callback(callback: CallbackQuery, bot: Bot):
+    """Generates natural speech from text, then offers voice effects."""
+    user_id = callback.from_user.id
+    parts = callback.data.split(":")
+    voice_key, text_token = parts[1], parts[2]
+
+    data = TEXT_STORAGE.get(text_token)
+    if not data:
+        await callback.answer(t(user_id, "expired"), show_alert=True)
+        return
+
+    voice_info = TTS_VOICES.get(voice_key, TTS_VOICES["uz_female"])
+    await callback.answer("🎙 Nutq tayyorlanmoqda...")
+
+    proc_msg = await callback.message.reply(
+        t(user_id, "processing_tts", name=voice_info["name"]),
+        parse_mode=ParseMode.HTML
+    )
+
+    file_token = uuid.uuid4().hex[:10]
+    output_path = TEMP_DIR / f"{file_token}_tts.ogg"
+
+    try:
+        success = await generate_tts(data["text"], voice_key, output_path)
+        if not success or not output_path.exists():
+            await proc_msg.edit_text(t(user_id, "error_processing"))
+            return
+
+        # Store generated audio in AUDIO_STORAGE so user can apply effects to it!
+        AUDIO_STORAGE[file_token] = {
+            "path": output_path,
+            "user_id": user_id,
+            "created_at": time.time()
+        }
+
+        bot_info = await bot.get_me()
+        bot_username = bot_info.username or "voicechangerautobot"
+
         caption = (
-            f"✨ <b>Effekt:</b> {effect['name']}\n"
-            f"📝 <i>{effect['description']}</i>\n\n"
+            f"✍️ <i>«{data['text'][:80]}»</i>\n\n"
+            f"🗣 <b>Ovoz:</b> {voice_info['name']}\n"
             f"🤖 @{bot_username}"
         )
 
         await callback.message.reply_voice(
-            voice=voice_file,
+            voice=FSInputFile(output_path),
             caption=caption,
             parse_mode=ParseMode.HTML,
-            reply_markup=get_after_effect_keyboard(file_token)
+            reply_markup=get_voice_effects_keyboard(file_token, user_id, page=1)
         )
-        await processing_msg.delete()
-
+        await proc_msg.delete()
     except Exception as e:
-        logger.exception("Error processing voice effect: %s", e)
-        await processing_msg.edit_text("❌ Effektni qo'llashda xatolik yuz berdi.")
-    finally:
-        # Clean up processed output file after sending
-        if output_path.exists():
-            try:
-                output_path.unlink(missing_ok=True)
-            except Exception:
-                pass
+        logger.exception("Error in TTS: %s", e)
+        await proc_msg.edit_text(t(user_id, "error_processing"))
 
 
 @dp.callback_query(F.data.startswith("menu:"))
 async def handle_menu_callback(callback: CallbackQuery):
-    """Reopens the voice effects selection menu for the same audio."""
+    """Reopens effect menu."""
+    user_id = callback.from_user.id
     file_token = callback.data.split(":")[1]
     data = AUDIO_STORAGE.get(file_token)
     if not data or not data["path"].exists():
-        await callback.answer("⚠️ Ovoz muddati tugagan. Yangi ovoz yuboring.", show_alert=True)
+        await callback.answer(t(user_id, "expired"), show_alert=True)
         return
 
-    keyboard = get_voice_effects_keyboard(file_token)
+    keyboard = get_voice_effects_keyboard(file_token, user_id, page=1)
     await callback.message.reply(
-        "🎭 <b>Boshqa effekt tanlang:</b>",
+        t(user_id, "voice_ready"),
         reply_markup=keyboard,
         parse_mode=ParseMode.HTML
     )
     await callback.answer()
 
 
-@dp.callback_query(F.data == "info:effects")
-async def handle_info_callback(callback: CallbackQuery):
-    """Shows modal popup with information about all effects."""
-    effects_summary = "\n".join([f"• {e['name']}: {e['description']}" for e in VOICE_EFFECTS.values()])
-    await callback.message.answer(
-        f"ℹ️ <b>Barcha ovoz effektlari haqida:</b>\n\n{effects_summary}",
+@dp.callback_query(F.data.startswith("menu_amb:"))
+async def handle_ambience_menu_callback(callback: CallbackQuery):
+    """Opens ambience background sounds menu."""
+    user_id = callback.from_user.id
+    file_token = callback.data.split(":")[1]
+    data = AUDIO_STORAGE.get(file_token)
+    if not data or not data["path"].exists():
+        await callback.answer(t(user_id, "expired"), show_alert=True)
+        return
+
+    keyboard = get_ambience_keyboard(file_token, user_id)
+    await callback.message.reply(
+        t(user_id, "ambience_ready"),
+        reply_markup=keyboard,
         parse_mode=ParseMode.HTML
     )
     await callback.answer()
@@ -247,17 +458,67 @@ async def handle_info_callback(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("cancel:"))
 async def handle_cancel_callback(callback: CallbackQuery):
-    """Cancels and cleans up the stored file."""
+    """Cancels and deletes temporary session."""
+    user_id = callback.from_user.id
     file_token = callback.data.split(":")[1]
     data = AUDIO_STORAGE.pop(file_token, None)
-    if data and data["path"].exists():
-        try:
-            data["path"].unlink(missing_ok=True)
-        except Exception:
-            pass
-    await callback.message.edit_text("❌ Bekor qilindi.")
-    await callback.answer("Bekor qilindi.")
+    if data and "path" in data and data["path"].exists():
+        data["path"].unlink(missing_ok=True)
+    TEXT_STORAGE.pop(file_token, None)
+    await callback.message.edit_text(t(user_id, "cancelled"))
+    await callback.answer(t(user_id, "cancelled"))
 
+
+@dp.callback_query(F.data == "noop")
+async def handle_noop(callback: CallbackQuery):
+    await callback.answer()
+
+
+# ---------------------- INLINE MODE HANDLER ----------------------
+
+@dp.inline_query()
+async def handle_inline_query(inline_query: InlineQuery, bot: Bot):
+    """Handles inline queries to send voice messages in any chat directly."""
+    query = inline_query.query.strip()
+    results = []
+
+    if not query:
+        # Show prompt to type text
+        results.append(
+            InlineQueryResultArticle(
+                id="hint",
+                title="🎙 Ovozli xabar yaratish uchun matn yozing",
+                description="Masalan: @voicechangerautobot Salom do'stlar!",
+                input_message_content=InputTextMessageContent(
+                    message_text="🎙 <b>Voice Changer Bot</b> orqali ovozli xabar yaratish uchun matn yozing!",
+                    parse_mode=ParseMode.HTML
+                )
+            )
+        )
+        await inline_query.answer(results, cache_time=5, is_personal=True)
+        return
+
+    # Generate inline options
+    bot_info = await bot.get_me()
+    bot_username = bot_info.username or "voicechangerautobot"
+
+    for idx, (v_key, v_info) in enumerate(TTS_VOICES.items()):
+        results.append(
+            InlineQueryResultArticle(
+                id=f"inline_{v_key}_{idx}",
+                title=f"🗣 {v_info['name']}",
+                description=f"«{query[:50]}» matnini ovozda yuborish",
+                input_message_content=InputTextMessageContent(
+                    message_text=f"🎙 <b>{v_info['name']}:</b>\n«{query}»\n\n🤖 @{bot_username}",
+                    parse_mode=ParseMode.HTML
+                )
+            )
+        )
+
+    await inline_query.answer(results, cache_time=10, is_personal=True)
+
+
+# ---------------------- HEALTH CHECK SERVER ----------------------
 
 async def run_health_server():
     """Runs a minimal HTTP server for cloud platforms (Render, Koyeb, Railway)."""
@@ -269,7 +530,7 @@ async def run_health_server():
         return
 
     async def handle_ping(request):
-        return web.Response(text="🎙 Voice Changer Bot is running 24/7!")
+        return web.Response(text="🎙 Voice Changer & TTS AI Bot is running 24/7!")
 
     app = web.Application()
     app.router.add_get("/", handle_ping)
@@ -282,40 +543,29 @@ async def run_health_server():
     logger.info("Health check web server running on port %s", port)
 
 
+# ---------------------- MAIN ENTRYPOINT ----------------------
+
 async def main():
-    """Main application runner."""
     if not BOT_TOKEN or BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
         print("\n" + "=" * 60)
         print("❌ XATOLIK: Telegram Bot Token kiritilmagan!")
-        print("Iltimos, .env faylini oching va BOT_TOKEN qatoriga Telegram bot tokeningizni yozing.")
-        print("Misol:")
-        print("BOT_TOKEN=1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ")
         print("=" * 60 + "\n")
         return
 
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
-    # Test bot token connectivity
     try:
         me = await bot.get_me()
         print("\n" + "=" * 60)
-        print(f"🤖 Bot muvaffaqiyatli ishga tushdi: @{me.username} ({me.first_name})")
-        print("🎙 Voice Changer Bot ovozli xabarlarni kutmoqda...")
+        print(f"🤖 Bot ishga tushdi: @{me.username} ({me.first_name})")
+        print("🎙 Voice Changer & TTS Bot 24/7 tayyor!")
         print("=" * 60 + "\n")
     except Exception as e:
-        print("\n" + "=" * 60)
-        print(f"❌ Telegram Botga ulanishda xatolik: {e}")
-        print("Iltimos, bot tokeningiz to'g'riligini tekshiring.")
-        print("=" * 60 + "\n")
+        print(f"❌ Ulanishda xatolik: {e}")
         return
 
-    # Start background cleanup task
     asyncio.create_task(cleanup_old_files())
-
-    # Start health check server if running on cloud
     await run_health_server()
-
-    # Start polling
     await dp.start_polling(bot)
 
 
