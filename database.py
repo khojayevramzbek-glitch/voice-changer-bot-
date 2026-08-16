@@ -1,5 +1,6 @@
 import sqlite3
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -22,6 +23,15 @@ def init_db():
         )
     """)
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usage_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            action_type TEXT,
+            detail TEXT,
+            created_at REAL
+        )
+    """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT
@@ -32,10 +42,7 @@ def init_db():
 
 
 def register_user(user_id: int, username: Optional[str], first_name: Optional[str]) -> Tuple[bool, dict]:
-    """
-    Registers a new user or updates their last active time and info.
-    Returns (is_new_user, user_dict).
-    """
+    """Registers a new user or updates info."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     now = time.time()
@@ -60,26 +67,42 @@ def register_user(user_id: int, username: Optional[str], first_name: Optional[st
     return is_new, {"user_id": user_id, "username": username, "first_name": first_name}
 
 
-def increment_voice(user_id: int):
-    """Increments the processed voice count for a user."""
+def log_action(user_id: int, action_type: str, detail: str = ""):
+    """Logs every single user action into analytics history."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET voice_count = voice_count + 1, last_active = ? WHERE user_id = ?", (time.time(), user_id))
+    cursor.execute("""
+        INSERT INTO usage_logs (user_id, action_type, detail, created_at)
+        VALUES (?, ?, ?, ?)
+    """, (user_id, action_type, detail, time.time()))
     conn.commit()
     conn.close()
 
 
-def increment_tts(user_id: int):
+def increment_voice(user_id: int, effect_name: str = ""):
+    """Increments the processed voice count for a user and logs effect."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    now = time.time()
+    cursor.execute("UPDATE users SET voice_count = voice_count + 1, last_active = ? WHERE user_id = ?", (now, user_id))
+    cursor.execute("INSERT INTO usage_logs (user_id, action_type, detail, created_at) VALUES (?, 'voice_effect', ?, ?)", (user_id, effect_name, now))
+    conn.commit()
+    conn.close()
+
+
+def increment_tts(user_id: int, voice_name: str = ""):
     """Increments the generated TTS count for a user."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("UPDATE users SET tts_count = tts_count + 1, last_active = ? WHERE user_id = ?", (time.time(), user_id))
+    now = time.time()
+    cursor.execute("UPDATE users SET tts_count = tts_count + 1, last_active = ? WHERE user_id = ?", (now, user_id))
+    cursor.execute("INSERT INTO usage_logs (user_id, action_type, detail, created_at) VALUES (?, 'tts', ?, ?)", (user_id, voice_name, now))
     conn.commit()
     conn.close()
 
 
-def get_statistics() -> Dict[str, int]:
-    """Calculates aggregate statistics."""
+def get_detailed_statistics() -> dict:
+    """Calculates comprehensive deep analytics."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -89,11 +112,29 @@ def get_statistics() -> Dict[str, int]:
     total_voices = row[1] or 0
     total_tts = row[2] or 0
 
+    # Today active (since 00:00 today)
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    cursor.execute("SELECT COUNT(*) FROM users WHERE last_active >= ?", (today_start,))
+    today_active = cursor.fetchone()[0] or 0
+
+    # Top popular effects
+    cursor.execute("""
+        SELECT detail, COUNT(*) as cnt
+        FROM usage_logs
+        WHERE action_type = 'voice_effect' AND detail != ''
+        GROUP BY detail
+        ORDER BY cnt DESC
+        LIMIT 5
+    """)
+    top_effects = cursor.fetchall()
+
     conn.close()
     return {
         "total_users": total_users,
+        "today_active": today_active,
         "total_voices": total_voices,
-        "total_tts": total_tts
+        "total_tts": total_tts,
+        "top_effects": top_effects
     }
 
 
@@ -135,7 +176,7 @@ def get_all_user_ids() -> List[int]:
 
 
 def set_admin_id(admin_id: int):
-    """Sets or updates the primary admin Telegram ID."""
+    """Sets primary admin ID."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('admin_id', ?)", (str(admin_id),))
@@ -144,7 +185,7 @@ def set_admin_id(admin_id: int):
 
 
 def get_admin_id() -> Optional[int]:
-    """Gets the primary admin Telegram ID from database."""
+    """Gets primary admin ID."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT value FROM settings WHERE key = 'admin_id'")
@@ -157,5 +198,5 @@ def get_admin_id() -> Optional[int]:
             return None
     return None
 
-# Initialize on module load
+
 init_db()
