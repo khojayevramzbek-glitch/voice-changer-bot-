@@ -265,19 +265,43 @@ async def apply_ambience_effect(input_path: Path, output_path: Path, ambience_ke
     return await asyncio.to_thread(_run_ffmpeg_sync, cmd)
 
 
-async def generate_tts(text: str, voice_key: str, output_path: Path) -> bool:
-    """Generates natural neural speech using edge-tts ultrafast."""
+async def generate_tts(text: str, voice_key: str, output_path: Path, style: str = "natural") -> bool:
+    """
+    Generates natural, highly-expressive neural speech with broadcast studio acoustic warmth.
+    """
     voice_info = TTS_VOICES.get(voice_key, TTS_VOICES["uz_female"])
+    voice_name = voice_info["voice"]
+
+    # Rate and pitch adjustments for natural human expressiveness
+    rate = "+1%"
+    pitch = "+1Hz"
+
+    if "excited" in style:
+        rate = "+8%"
+        pitch = "+4Hz"
+    elif "calm" in style:
+        rate = "-5%"
+        pitch = "-2Hz"
+
     try:
-        communicate = edge_tts.Communicate(text, voice_info["voice"])
+        communicate = edge_tts.Communicate(text, voice_name, rate=rate, pitch=pitch)
         temp_mp3 = output_path.with_suffix(".temp.mp3")
         await communicate.save(str(temp_mp3))
+
+        # Broadcast Studio EQ: Adds warm human chest presence + treble clarity
+        studio_filter = (
+            "equalizer=f=220:t=q:w=1.5:g=2.5,"
+            "equalizer=f=3600:t=q:w=1.2:g=3.0,"
+            "highpass=f=80,"
+            "compand=0.02|0.05:0.1|0.1:-60/-60|-25/-12|0/-1:5:0:0:0.02"
+        )
 
         cmd = [
             "ffmpeg", "-y",
             "-i", str(temp_mp3),
+            "-af", studio_filter,
             "-c:a", "libopus",
-            "-b:a", "48k",
+            "-b:a", "64k",
             "-application", "voip",
             str(output_path)
         ]
