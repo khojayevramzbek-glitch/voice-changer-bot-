@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 
 # 20+ Studio-Calibrated Professional Voice Effects
 VOICE_EFFECTS = {
+    # 🧔‍♂️ Deep Mature Adult Male: Heavy chest resonance & deep masculine baritone
+    "deep_man": {
+        "uz": "🧔‍♂️ Yo'g'on Katta Odam (Deep Voice)", "ru": "🧔‍♂️ Глубокий Мужской Голос", "en": "🧔‍♂️ Deep Mature Man",
+        "filter": "asetrate=48000*0.82,aresample=48000,atempo=1.22,bass=g=11:f=110,equalizer=f=260:t=q:w=1.4:g=7,equalizer=f=3000:t=q:w=1.2:g=2.5",
+        "desc_uz": "Juda yo'g'on, salobatli va jiddiy katta erkak ovozi",
+        "desc_ru": "Густой, низкий и брутальный взрослый мужской баритон",
+        "desc_en": "Deep, authoritative and heavy mature masculine baritone"
+    },
     # 🐿 Alvin & the Chipmunks: Crystal-clear squeaky high pitch with formant boost
     "chipmunk": {
         "uz": "🐿 Chipmunk (Alvin Burunduk)", "ru": "🐿 Бурундук (Элвин)", "en": "🐿 Alvin Chipmunk",
