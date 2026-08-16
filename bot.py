@@ -711,6 +711,8 @@ async def handle_noop(callback: CallbackQuery):
 
 @dp.inline_query()
 async def handle_inline_query(inline_query: InlineQuery, bot: Bot):
+    """Handles inline queries to send authentic Telegram Voice Notes in any chat!"""
+    import urllib.parse
     query = inline_query.query.strip()
     results = []
 
@@ -726,50 +728,85 @@ async def handle_inline_query(inline_query: InlineQuery, bot: Bot):
                 )
             )
         )
-        await inline_query.answer(results, cache_time=5, is_personal=True)
+        await inline_query.answer(results, cache_time=3, is_personal=True)
         return
 
     bot_info = await bot.get_me()
     bot_username = bot_info.username or "voicechangerautobot"
 
+    # Base web service domain
+    render_domain = os.getenv("RENDER_EXTERNAL_URL", "https://voice-changer-bot-5pts.onrender.com").rstrip("/")
+
     for idx, (v_key, v_info) in enumerate(TTS_VOICES.items()):
+        encoded_text = urllib.parse.quote(query[:150])
+        voice_url = f"{render_domain}/api/tts_voice?text={encoded_text}&voice={v_key}"
+
         results.append(
-            InlineQueryResultArticle(
-                id=f"inline_{v_key}_{idx}",
-                title=f"🗣 {v_info['name']}",
-                description=f"«{query[:50]}» matnini ovozda yuborish",
-                input_message_content=InputTextMessageContent(
-                    message_text=f"🎙 <b>{v_info['name']}:</b>\n«{query}»\n\n🤖 @{bot_username}",
-                    parse_mode=ParseMode.HTML
-                )
+            InlineQueryResultVoice(
+                id=f"v_{v_key}_{idx}_{abs(hash(query))%100000}",
+                voice_url=voice_url,
+                title=f"{v_info['name']}",
+                caption=f"🎙 <b>{v_info['name']}:</b>\n«{query}»\n\n🤖 @{bot_username}",
+                parse_mode=ParseMode.HTML
             )
         )
 
     await inline_query.answer(results, cache_time=10, is_personal=True)
 
 
-# ---------------------- HEALTH CHECK SERVER ----------------------
+# ---------------------- HEALTH & TTS STREAM SERVER ----------------------
 
 async def run_health_server():
+    """Runs HTTP server with live TTS audio streaming for Inline Voice Notes."""
     import os
     from aiohttp import web
 
-    port = int(os.getenv("PORT", 0))
-    if not port:
-        return
+    port = int(os.getenv("PORT", 10000))
 
     async def handle_ping(request):
-        return web.Response(text="🎙 Voice Changer & Analytics Bot is running 24/7!")
+        return web.Response(text="🎙 Voice Changer & TTS AI Bot is running 24/7!")
+
+    async def handle_tts_voice_stream(request):
+        """Generates and streams authentic OGG Opus voice notes directly for Telegram Inline!"""
+        text = request.query.get("text", "").strip()
+        voice_key = request.query.get("voice", "uz_male")
+        if not text:
+            return web.Response(status=400, text="Missing text")
+
+        token = uuid.uuid4().hex[:8]
+        temp_ogg = TEMP_DIR / f"inline_{token}.ogg"
+        try:
+            success = await generate_tts(text, voice_key, temp_ogg)
+            if not success or not temp_ogg.exists():
+                return web.Response(status=500, text="TTS generation failed")
+
+            with open(temp_ogg, "rb") as f:
+                audio_data = f.read()
+
+            return web.Response(
+                body=audio_data,
+                content_type="audio/ogg",
+                headers={
+                    "Content-Disposition": f'inline; filename="{token}.ogg"',
+                    "Cache-Control": "public, max-age=86400"
+                }
+            )
+        except Exception as e:
+            logger.exception("Error in tts_voice stream: %s", e)
+            return web.Response(status=500, text=str(e))
+        finally:
+            temp_ogg.unlink(missing_ok=True)
 
     app = web.Application()
     app.router.add_get("/", handle_ping)
     app.router.add_get("/health", handle_ping)
+    app.router.add_get("/api/tts_voice", handle_tts_voice_stream)
 
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info("Health check web server running on port %s", port)
+    logger.info("Web server and TTS streaming running on port %s", port)
 
 
 # ---------------------- MAIN ENTRYPOINT ----------------------
