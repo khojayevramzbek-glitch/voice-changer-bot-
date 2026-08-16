@@ -370,6 +370,7 @@ async def handle_incoming_voice(message: Message, bot: Bot):
             return
 
         dest_path = TEMP_DIR / f"{file_token}_input{ext}"
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
         await bot.download_file(file.file_path, destination=dest_path)
 
         payload = {
