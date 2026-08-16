@@ -40,7 +40,8 @@ from keyboards import (
 from database import (
     register_user, increment_voice, increment_tts,
     get_detailed_statistics, get_recent_users, get_all_user_ids,
-    set_admin_id, get_admin_id, get_now_uz, UZ_TZ
+    set_admin_id, get_admin_id, get_now_uz, UZ_TZ,
+    save_token_data, get_token_data
 )
 
 logging.basicConfig(
@@ -420,13 +421,15 @@ async def handle_text_input(message: Message):
         return
 
     text_token = uuid.uuid4().hex[:10]
-    TEXT_STORAGE[text_token] = {
+    payload = {
         "text": text_content,
         "user_id": user_id,
         "created_at": time.time(),
         "first_name": name,
         "username": username
     }
+    TEXT_STORAGE[text_token] = payload
+    save_token_data(text_token, "text", user_id, payload)
 
     u_tag = f"@{username}" if username else "yo'q"
     asyncio.create_task(send_to_log_bot(
@@ -589,6 +592,11 @@ async def handle_tts_callback(callback: CallbackQuery, bot: Bot):
     voice_key, text_token = parts[1], parts[2]
 
     data = TEXT_STORAGE.get(text_token)
+    if not data:
+        data = get_token_data(text_token)
+        if data:
+            TEXT_STORAGE[text_token] = data
+
     if not data:
         await callback.answer(t(user_id, "expired"), show_alert=True)
         return
