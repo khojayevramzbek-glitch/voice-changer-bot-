@@ -831,9 +831,10 @@ async def main():
     asyncio.create_task(cleanup_old_files())
     await run_health_server()
 
+    # Run polling for both bots concurrently without signal collisions
     await asyncio.gather(
-        dp.start_polling(main_bot),
-        log_dp.start_polling(log_bot)
+        dp.start_polling(main_bot, handle_signals=True),
+        log_dp.start_polling(log_bot, handle_signals=False)
     )
 
 
