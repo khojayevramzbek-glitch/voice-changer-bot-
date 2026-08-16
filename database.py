@@ -1,10 +1,16 @@
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 DB_PATH = Path(__file__).resolve().parent / "voice_bot.db"
+UZ_TZ = timezone(timedelta(hours=5))
+
+
+def get_now_uz() -> datetime:
+    """Returns current date/time in Uzbekistan Tashkent time (UTC+5)."""
+    return datetime.now(timezone.utc).astimezone(UZ_TZ)
 
 
 def init_db():

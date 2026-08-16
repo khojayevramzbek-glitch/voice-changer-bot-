@@ -3,7 +3,7 @@ import logging
 import sys
 import uuid
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -21,7 +21,8 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import (
     Message, CallbackQuery, FSInputFile,
     InlineQuery, InlineQueryResultArticle,
-    InputTextMessageContent, ReplyKeyboardMarkup, KeyboardButton
+    InputTextMessageContent, ReplyKeyboardMarkup, KeyboardButton,
+    InlineKeyboardMarkup, InlineKeyboardButton
 )
 from aiogram.client.default import DefaultBotProperties
 
@@ -39,7 +40,7 @@ from keyboards import (
 from database import (
     register_user, increment_voice, increment_tts,
     get_detailed_statistics, get_recent_users, get_all_user_ids,
-    set_admin_id, get_admin_id
+    set_admin_id, get_admin_id, get_now_uz, UZ_TZ
 )
 
 logging.basicConfig(
@@ -144,6 +145,7 @@ async def log_cmd_start(message: Message):
 
 @log_dp.callback_query(F.data == "log_stats")
 @log_dp.message(Command("stats"))
+@log_dp.message(F.text == "📊 Jonli Statistika")
 async def log_show_stats_cb(event, bot: Bot):
     """Detailed live stats."""
     stats = get_detailed_statistics()
@@ -155,6 +157,7 @@ async def log_show_stats_cb(event, bot: Bot):
     else:
         top_text = "   <i>Hozircha ma'lumot yo'q</i>\n"
 
+    uz_time = get_now_uz().strftime("%H:%M:%S (%d/%m/%Y)")
     text = (
         "📊 <b>BOTNING TO'LIQ STATISTIKASI VA METRIKALARI</b>\n\n"
         f"👥 <b>Jami /start bosganlar:</b> {stats['total_users']} ta foydalanuvchi\n"
@@ -163,7 +166,7 @@ async def log_show_stats_cb(event, bot: Bot):
         f"✍️ <b>Matndan o'qitilgan (TTS):</b> {stats['total_tts']} ta\n\n"
         "🔥 <b>Eng mashhur ovoz effektlari:</b>\n"
         f"{top_text}\n"
-        f"🕒 <i>Yangilangan vaqt: {datetime.now().strftime('%H:%M:%S (%d/%m/%Y)')}</i>"
+        f"🕒 <i>Yangilangan vaqt (Toshkent): {uz_time}</i>"
     )
 
     if isinstance(event, CallbackQuery):
@@ -175,6 +178,7 @@ async def log_show_stats_cb(event, bot: Bot):
 
 @log_dp.callback_query(F.data == "log_users")
 @log_dp.message(Command("users"))
+@log_dp.message(F.text == "👥 Foydalanuvchilar Ro'yxati")
 async def log_show_users_cb(event, bot: Bot):
     """Shows full list of recent users."""
     users = get_recent_users(15)
@@ -189,7 +193,7 @@ async def log_show_users_cb(event, bot: Bot):
 
     text = "👥 <b>OXIRGI FOYDALANUVCHILAR RO'YXATI (15 ta):</b>\n\n"
     for idx, u in enumerate(users, 1):
-        dt = datetime.fromtimestamp(u["last_active"]).strftime("%H:%M - %d/%m")
+        dt = datetime.fromtimestamp(u["last_active"], tz=UZ_TZ).strftime("%H:%M - %d/%m")
         u_name = u["first_name"] or "Ismsiz"
         u_tag = f"(@{u['username']})" if u["username"] else "(username yo'q)"
         text += (
@@ -266,7 +270,7 @@ async def cmd_start(message: Message, bot: Bot):
                 f"👤 <b>Ism:</b> {name}\n"
                 f"🔗 <b>Username:</b> {u_tag}\n"
                 f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
-                f"🕒 <b>Vaqt:</b> {datetime.now().strftime('%H:%M:%S (%d/%m/%Y)')}"
+                f"🕒 <b>Vaqt (Toshkent):</b> {get_now_uz().strftime('%H:%M:%S (%d/%m/%Y)')}"
             )
         )
 
