@@ -1,24 +1,21 @@
 @echo off
-chcp 65001 > nul
-title Telegram Voice Changer Bot
-
-echo ======================================================
-echo       🎙 TELEGRAM VOICE CHANGER BOT ISHGA TUSHMOQDA
-echo ======================================================
+title Voice Changer AI & Log Bot 24/7
+cd /d "%~dp0"
+echo ============================================================
+echo      🎙 Voice Changer AI + 🕵️‍♂️ Spy Log Bot ishga tushmoqda...
+echo ============================================================
 echo.
 
-cd /d "%~dp0"
-
 if not exist ".venv\Scripts\python.exe" (
-    echo [XATOLIK] Virtual muhit (.venv) topilmadi!
-    pause
-    exit /b
+    echo [!] Python virtual muhit topilmadi. O'rnatilmoqda...
+    python -m venv .venv
+    call .venv\Scripts\activate
+    pip install -r requirements.txt
+) else (
+    call .venv\Scripts\activate
 )
 
-.venv\Scripts\python.exe bot.py
+echo [*] Botlar ulanmoqda...
+python -u bot.py
 
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo [Dastur to'xtadi]
-    pause
-)
+pause
