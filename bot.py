@@ -693,8 +693,7 @@ async def handle_noop(callback: CallbackQuery):
 
 @dp.inline_query()
 async def handle_inline_query(inline_query: InlineQuery, bot: Bot):
-    """Handles inline queries to send authentic Telegram Voice Notes in any chat!"""
-    import urllib.parse
+    """Handles inline queries to send instant interactive voice cards in any chat!"""
     query = inline_query.query.strip()
     results = []
 
@@ -705,35 +704,46 @@ async def handle_inline_query(inline_query: InlineQuery, bot: Bot):
                 title="🎙 Ovozli xabar yaratish uchun matn yozing",
                 description="Masalan: @voicechangerautobot Salom do'stlar!",
                 input_message_content=InputTextMessageContent(
-                    message_text="🎙 <b>Voice Changer Bot</b> orqali ovozli xabar yaratish uchun matn yozing!",
+                    message_text="🎙 <b>Voice Changer Bot</b> orqali ovozli xabar yaratish uchun matn yozing!\n\n<i>Misol: @voicechangerautobot Bugun darsga bormayman</i>",
                     parse_mode=ParseMode.HTML
                 )
             )
         )
-        await inline_query.answer(results, cache_time=3, is_personal=True)
+        await inline_query.answer(results, cache_time=1, is_personal=True)
         return
 
-    bot_info = await bot.get_me()
-    bot_username = bot_info.username or "voicechangerautobot"
-
-    # Base web service domain
-    render_domain = os.getenv("RENDER_EXTERNAL_URL", "https://voice-changer-bot-5pts.onrender.com").rstrip("/")
-
+    # Generate rich interactive inline cards with direct Bot voice action
     for idx, (v_key, v_info) in enumerate(TTS_VOICES.items()):
-        encoded_text = urllib.parse.quote(query[:150])
-        voice_url = f"{render_domain}/api/tts_voice?text={encoded_text}&voice={v_key}"
+        msg_text = (
+            f"🗣 <b>{v_info['name']}:</b>\n"
+            f"«<i>{query}</i>»\n\n"
+            f"✨ <i>Ovozli xabarga aylantirish va effektlar uchun pastdagi tugmani bosing:</i>"
+        )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🎙 Ovozli Xabarni Eshitish / O'zgartirish",
+                        url=f"https://t.me/voicechangerautobot?start=tts"
+                    )
+                ]
+            ]
+        )
 
         results.append(
-            InlineQueryResultVoice(
-                id=f"v_{v_key}_{idx}_{abs(hash(query))%100000}",
-                voice_url=voice_url,
-                title=f"{v_info['name']}",
-                caption=f"🎙 <b>{v_info['name']}:</b>\n«{query}»\n\n🤖 @{bot_username}",
-                parse_mode=ParseMode.HTML
+            InlineQueryResultArticle(
+                id=f"inline_article_{v_key}_{idx}",
+                title=f"🗣 {v_info['name']}",
+                description=f"«{query[:45]}...» matnini ovozda yuborish",
+                input_message_content=InputTextMessageContent(
+                    message_text=msg_text,
+                    parse_mode=ParseMode.HTML
+                ),
+                reply_markup=keyboard
             )
         )
 
-    await inline_query.answer(results, cache_time=10, is_personal=True)
+    await inline_query.answer(results, cache_time=1, is_personal=True)
 
 
 # ---------------------- HEALTH & TTS STREAM SERVER ----------------------
