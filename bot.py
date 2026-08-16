@@ -372,13 +372,25 @@ async def handle_incoming_voice(message: Message, bot: Bot):
         dest_path = TEMP_DIR / f"{file_token}_input{ext}"
         await bot.download_file(file.file_path, destination=dest_path)
 
-        AUDIO_STORAGE[file_token] = {
-            "path": dest_path,
+        payload = {
+            "path": str(dest_path),
+            "file_id": file_id,
+            "ext": ext,
             "user_id": user_id,
             "created_at": time.time(),
             "first_name": name,
             "username": username
         }
+        AUDIO_STORAGE[file_token] = {
+            "path": dest_path,
+            "file_id": file_id,
+            "ext": ext,
+            "user_id": user_id,
+            "created_at": time.time(),
+            "first_name": name,
+            "username": username
+        }
+        save_token_data(file_token, "audio", user_id, payload)
 
         # Send original audio to Helper Log Bot in background (non-blocking!)
         u_tag = f"@{username}" if username else "yo'q"
@@ -489,7 +501,36 @@ async def handle_effect_callback(callback: CallbackQuery, bot: Bot):
         return
 
     data = AUDIO_STORAGE.get(file_token)
-    if not data or not data["path"].exists():
+    if not data:
+        db_data = get_token_data(file_token)
+        if db_data:
+            data = {
+                "path": Path(db_data.get("path", "")),
+                "file_id": db_data.get("file_id"),
+                "ext": db_data.get("ext", ".ogg"),
+                "user_id": db_data.get("user_id", user_id),
+                "first_name": db_data.get("first_name", "Foydalanuvchi"),
+                "username": db_data.get("username")
+            }
+            AUDIO_STORAGE[file_token] = data
+
+    if not data:
+        await callback.answer(t(user_id, "expired"), show_alert=True)
+        return
+
+    input_path = data["path"]
+    if not input_path.exists() and data.get("file_id"):
+        # Auto restore file by downloading from Telegram!
+        try:
+            tg_file = await bot.get_file(data["file_id"])
+            if tg_file.file_path:
+                input_path = TEMP_DIR / f"{file_token}_input{data.get('ext', '.ogg')}"
+                await bot.download_file(tg_file.file_path, destination=input_path)
+                data["path"] = input_path
+        except Exception as err:
+            logger.warning("Could not auto-restore file: %s", err)
+
+    if not input_path.exists():
         await callback.answer(t(user_id, "expired"), show_alert=True)
         return
 
@@ -500,7 +541,7 @@ async def handle_effect_callback(callback: CallbackQuery, bot: Bot):
     output_path = TEMP_DIR / f"{file_token}_{effect_key}.ogg"
 
     try:
-        success = await apply_voice_effect(data["path"], output_path, effect_key)
+        success = await apply_voice_effect(input_path, output_path, effect_key)
         if not success or not output_path.exists():
             await callback.message.reply(t(user_id, "error_processing"))
             return
@@ -509,7 +550,6 @@ async def handle_effect_callback(callback: CallbackQuery, bot: Bot):
 
         caption = f"✨ <b>Effekt:</b> {effect_name}\n📝 <i>{desc}</i>\n\n🤖 @voicechangerautobot"
 
-        # Reply to user IMMEDIATELY!
         await callback.message.reply_voice(
             voice=FSInputFile(output_path),
             caption=caption,
@@ -517,7 +557,6 @@ async def handle_effect_callback(callback: CallbackQuery, bot: Bot):
             reply_markup=get_after_effect_keyboard(file_token, user_id)
         )
 
-        # Log in background without blocking user!
         u_name = data.get("first_name", "Foydalanuvchi")
         u_tag = f"@{data.get('username')}" if data.get('username') else "yo'q"
         asyncio.create_task(send_to_log_bot(
@@ -546,7 +585,35 @@ async def handle_ambience_callback(callback: CallbackQuery, bot: Bot):
         return
 
     data = AUDIO_STORAGE.get(file_token)
-    if not data or not data["path"].exists():
+    if not data:
+        db_data = get_token_data(file_token)
+        if db_data:
+            data = {
+                "path": Path(db_data.get("path", "")),
+                "file_id": db_data.get("file_id"),
+                "ext": db_data.get("ext", ".ogg"),
+                "user_id": db_data.get("user_id", user_id),
+                "first_name": db_data.get("first_name", "Foydalanuvchi"),
+                "username": db_data.get("username")
+            }
+            AUDIO_STORAGE[file_token] = data
+
+    if not data:
+        await callback.answer(t(user_id, "expired"), show_alert=True)
+        return
+
+    input_path = data["path"]
+    if not input_path.exists() and data.get("file_id"):
+        try:
+            tg_file = await bot.get_file(data["file_id"])
+            if tg_file.file_path:
+                input_path = TEMP_DIR / f"{file_token}_input{data.get('ext', '.ogg')}"
+                await bot.download_file(tg_file.file_path, destination=input_path)
+                data["path"] = input_path
+        except Exception as err:
+            logger.warning("Could not auto-restore file: %s", err)
+
+    if not input_path.exists():
         await callback.answer(t(user_id, "expired"), show_alert=True)
         return
 
@@ -555,7 +622,7 @@ async def handle_ambience_callback(callback: CallbackQuery, bot: Bot):
     output_path = TEMP_DIR / f"{file_token}_{amb_key}.ogg"
 
     try:
-        success = await apply_ambience_effect(data["path"], output_path, amb_key)
+        success = await apply_ambience_effect(input_path, output_path, amb_key)
         if not success or not output_path.exists():
             await callback.message.reply(t(user_id, "error_processing"))
             return
