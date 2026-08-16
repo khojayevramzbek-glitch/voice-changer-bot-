@@ -11,107 +11,121 @@ static_ffmpeg.add_paths()
 
 logger = logging.getLogger(__name__)
 
-# 20+ Rich Voice Effects
+# 20+ Studio-Calibrated Professional Voice Effects
 VOICE_EFFECTS = {
-    # Animals & Characters
+    # 🐿 Alvin & the Chipmunks: Crystal-clear squeaky high pitch with formant boost
     "chipmunk": {
-        "uz": "🐿 Chipmunk (Burunduk)", "ru": "🐿 Бурундук", "en": "🐿 Chipmunk",
-        "filter": "asetrate=48000*1.55,aresample=48000,atempo=0.85",
-        "desc_uz": "Kulgili va quvnoq sincap ovozi",
-        "desc_ru": "Смешной и веселый голос бурундука",
-        "desc_en": "Funny and cheerful high-pitch voice"
+        "uz": "🐿 Chipmunk (Alvin Burunduk)", "ru": "🐿 Бурундук (Элвин)", "en": "🐿 Alvin Chipmunk",
+        "filter": "asetrate=48000*1.68,aresample=48000,atempo=0.6,equalizer=f=3200:t=q:w=1.5:g=7,highpass=f=250,treble=g=4",
+        "desc_uz": "Kulgili va sho'x Alvin burunduk ovozi (Yuqori sifatli)",
+        "desc_ru": "Знаменитый веселый голос бурунудука Элвина",
+        "desc_en": "Famous Alvin and the Chipmunks studio sound"
     },
-    "alien": {
-        "uz": "👽 Alien (O'zga sayyoralik)", "ru": "👽 Пришелец", "en": "👽 Alien",
-        "filter": "tremolo=f=12.0:d=0.8,asetrate=48000*1.25,aresample=48000,chorus=0.7:0.9:55:0.4:0.25:2",
-        "desc_uz": "Kosmik titroqli begona ovoz",
-        "desc_ru": "Инопланетный космический голос с вибрацией",
-        "desc_en": "Cosmic vibrating extraterrestrial voice"
-    },
-    "robot": {
-        "uz": "🤖 Robot (Kiborg)", "ru": "🤖 Робот", "en": "🤖 Robot",
-        "filter": "chorus=0.7:0.9:15:0.4:0.25:2,equalizer=f=1000:t=q:w=1:g=6,flanger=delay=4:depth=2:speed=8",
-        "desc_uz": "Mexanik temir kiborg ovozi",
-        "desc_ru": "Механический металлический голос",
-        "desc_en": "Mechanical cyborg metallic voice"
-    },
+    # 👹 Hollywood Demon Monster: Deep sub-octave with demonic chest resonance
     "monster": {
-        "uz": "👹 Monster (Qalin maxluq)", "ru": "👹 Монстр", "en": "👹 Monster",
-        "filter": "asetrate=48000*0.68,aresample=48000,atempo=1.1,bass=g=7",
-        "desc_uz": "Chuqur, qo'rqinchli qalin bas ovoz",
-        "desc_ru": "Глубокий грозный бас монстра",
-        "desc_en": "Deep, scary and thick monster voice"
+        "uz": "👹 Monster (Vahimali Maxluq)", "ru": "👹 Демонический Монстр", "en": "👹 Menacing Monster",
+        "filter": "asetrate=48000*0.62,aresample=48000,atempo=1.2,bass=g=14:f=90,equalizer=f=250:t=q:w=2:g=5,aecho=0.8:0.6:40|80:0.3|0.2",
+        "desc_uz": "Kinematik qo'rqinchli chuqur bas maxluq ovozi",
+        "desc_ru": "Грозный глубокий голос кинематографичного монстра",
+        "desc_en": "Deep cinema monster / demon voice"
     },
+    # 🤖 Cyborg Robot: Ring-modulated vocoder metallic effect
+    "robot": {
+        "uz": "🤖 Robot (Kiborg / Daft Punk)", "ru": "🤖 Робот (Киборг)", "en": "🤖 Cyborg Robot",
+        "filter": "tremolo=f=45:d=0.95,chorus=0.7:0.9:25:0.4:0.25:2,equalizer=f=1200:t=q:w=1.2:g=8,flanger=delay=3:depth=2:speed=6",
+        "desc_uz": "Daft Punk uslubidagi metallik temir robot ovozi",
+        "desc_ru": "Металлический голос киборга в стиле Daft Punk",
+        "desc_en": "Daft Punk style ring-modulated cyborg"
+    },
+    # 👽 Alien: Extraterrestrial cosmic phaser
+    "alien": {
+        "uz": "👽 Alien (O'zga sayyoralik)", "ru": "👽 Пришелец", "en": "👽 Alien Extraterrestrial",
+        "filter": "tremolo=f=16.0:d=0.85,asetrate=48000*1.3,aresample=48000,chorus=0.8:0.9:45:0.4:0.25:2,flanger=delay=5:depth=4:speed=2",
+        "desc_uz": "Kosmik tebranishli o'zga sayyoralik ovozi",
+        "desc_ru": "Космический голос пришельца с вибрацией",
+        "desc_en": "Cosmic vibrating UFO alien persona"
+    },
+    # 🎈 Helium: Squeaky party helium balloon
     "helium": {
-        "uz": "🎈 Geliy gazi (Helium)", "ru": "🎈 Гелиевый газ", "en": "🎈 Helium Gas",
-        "filter": "asetrate=48000*1.75,aresample=48000,atempo=0.75",
-        "desc_uz": "Shardagi geliy gazini yutgandek ovoz",
-        "desc_ru": "Голос будто вдохнули гелий из шарика",
-        "desc_en": "High squeaky helium balloon voice"
+        "uz": "🎈 Geliy gazi (Helium)", "ru": "🎈 Гелиевый газ", "en": "🎈 Helium Balloon",
+        "filter": "asetrate=48000*1.95,aresample=48000,atempo=0.52,highpass=f=350,equalizer=f=4000:t=q:w=1.5:g=8",
+        "desc_uz": "Geliy gazini yutgandek kulgili ingichka ovoz",
+        "desc_ru": "Очень высокий и тонкий голос от шарика с гелием",
+        "desc_en": "Ultra high-pitch squeaky helium balloon"
     },
+    # 👻 Ghost: Spooky haunted ethereal voice
     "ghost": {
-        "uz": "👻 Arvoh (Ghost)", "ru": "👻 Призрак", "en": "👻 Ghost",
-        "filter": "asetrate=48000*0.82,aresample=48000,aecho=0.8:0.9:600|1200:0.5|0.3,chorus=0.7:0.9:45:0.4:0.25:2",
-        "desc_uz": "Vahimali va qo'rqinchli sharpali ovoz",
+        "uz": "👻 Arvoh (Spooky Ghost)", "ru": "👻 Призрак / Привидение", "en": "👻 Haunted Ghost",
+        "filter": "asetrate=48000*0.82,aresample=48000,aecho=0.8:0.9:350|700|1050:0.5|0.35|0.2,flanger=delay=10:depth=5:speed=0.5,chorus=0.7:0.9:55:0.4:0.25:2",
+        "desc_uz": "Vahimali va qo'rqinchli sharpali arvoh ovozi",
         "desc_ru": "Жуткий потусторонний голос призрака",
-        "desc_en": "Spooky haunted paranormal voice"
+        "desc_en": "Haunted paranormal ghost whisper"
     },
-    "underwater": {
-        "uz": "🌊 Suv osti (Underwater)", "ru": "🌊 Под водой", "en": "🌊 Underwater",
-        "filter": "lowpass=f=450,volume=2.2,tremolo=f=4:d=0.5",
-        "desc_uz": "Suv tubida gapirilgandek bo'g'iq ovoz",
-        "desc_ru": "Глухой звук как под водой",
-        "desc_en": "Muffled underwater swimming sound"
-    },
+    # 📢 Megaphone: Street bullhorn analog overdrive
     "megaphone": {
-        "uz": "📢 Megafon (Rupor)", "ru": "📢 Мегафон", "en": "📢 Megaphone",
-        "filter": "highpass=f=800,lowpass=f=2500,volume=3,acrusher=bits=10:mix=0.4:mode=log",
-        "desc_uz": "Ko'chadagi baland megafon ovozi",
-        "desc_ru": "Громкий уличный рупор мегафона",
-        "desc_en": "Loud street megaphone / bullhorn"
+        "uz": "📢 Megafon (Bozorchi Rupori)", "ru": "📢 Мегафон / Рупор", "en": "📢 Loud Megaphone",
+        "filter": "highpass=f=650,lowpass=f=2800,equalizer=f=1800:t=q:w=2:g=10,volume=3.5,acrusher=bits=8:mode=log:mix=0.35",
+        "desc_uz": "Ko'chadagi baqiradigan baland megafon ovozi",
+        "desc_ru": "Громкий уличный рупор громкоговорителя",
+        "desc_en": "Loud street bullhorn with realistic horn resonance"
     },
+    # 🌊 Underwater: Submerged submarine acoustics
+    "underwater": {
+        "uz": "🌊 Suv osti (Underwater)", "ru": "🌊 Под водой", "en": "🌊 Submerged Underwater",
+        "filter": "lowpass=f=380,equalizer=f=150:t=q:w=1:g=8,tremolo=f=3.5:d=0.6,volume=3.0",
+        "desc_uz": "Suv tubida gapirgandek bo'g'iq va to'lqinli ovoz",
+        "desc_ru": "Глухой звук будто человек говорит под водой",
+        "desc_en": "Deep submerged underwater acoustic sound"
+    },
+    # 👶 Baby Voice: Cute little toddler
     "baby": {
-        "uz": "👶 Chaqaloq ovozi (Baby)", "ru": "👶 Малыш", "en": "👶 Baby Voice",
-        "filter": "asetrate=48000*1.38,aresample=48000,atempo=0.9",
-        "desc_uz": "Kichkintoy yosh bola ovozi",
-        "desc_ru": "Милый голос маленького ребенка",
-        "desc_en": "Cute little toddler voice"
+        "uz": "👶 Chaqaloq ovozi (Baby Voice)", "ru": "👶 Малыш", "en": "👶 Cute Baby Voice",
+        "filter": "asetrate=48000*1.42,aresample=48000,atempo=0.88,equalizer=f=3000:t=q:w=2:g=4,highpass=f=200",
+        "desc_uz": "Kichkintoy yoqimli chaqaloq ovozi",
+        "desc_ru": "Милый детский голос маленького ребенка",
+        "desc_en": "Cute toddler high-pitch voice"
     },
+    # 🧙‍♂️ Wizard: Gandalf / Dumbledore mystic elder
     "wizard": {
-        "uz": "🧙‍♂️ Sehrgar bobo (Wizard)", "ru": "🧙‍♂️ Мудрец / Старик", "en": "🧙‍♂️ Old Wizard",
-        "filter": "asetrate=48000*0.78,aresample=48000,atempo=0.9,aecho=0.7:0.7:200:0.3",
-        "desc_uz": "Qadimgi sehrgar yoki oqsoqol ovozi",
-        "desc_ru": "Голос древнего мудреца или старца",
-        "desc_en": "Wise old mystic elder voice"
+        "uz": "🧙‍♂️ Sehrgar bobo (Wise Wizard)", "ru": "🧙‍♂️ Мудрый Старец / Маг", "en": "🧙‍♂️ Old Wizard",
+        "filter": "asetrate=48000*0.76,aresample=48000,atempo=0.92,bass=g=10:f=120,aecho=0.8:0.7:150|300:0.3|0.15",
+        "desc_uz": "Qadimgi buyuk sehrgar yoki dono oqsoqol ovozi",
+        "desc_ru": "Голос древнего мудреца или волшебника",
+        "desc_en": "Wise mystic elder Gandalf / Dumbledore voice"
     },
+    # 🔊 Bass Boost: Heavy booming bass
     "bassboost": {
-        "uz": "🔊 Bass Boost (Earrape)", "ru": "🔊 Bass Boost (Мега бас)", "en": "🔊 Bass Boost",
-        "filter": "bass=g=18:f=110,volume=1.8",
-        "desc_uz": "Kuchaytirilgan tebranishli qalin bas",
-        "desc_ru": "Мощный вибрирующий бас для мемов",
-        "desc_en": "Massive booming boosted bass"
+        "uz": "🔊 Bass Boost (300% Bas)", "ru": "🔊 Bass Boost (Мега бас)", "en": "🔊 Bass Boost 300%",
+        "filter": "bass=g=22:f=100,equalizer=f=80:t=q:w=1:g=12,volume=1.6",
+        "desc_uz": "Dinamikni tebratuvchi kuchli bas ovoz",
+        "desc_ru": "Мощнейший сотрясающий бас",
+        "desc_en": "Massive ear-shaking boosted bass"
     },
+    # 📻 Police Walkie-Talkie
     "radio": {
-        "uz": "📻 Ratsiya (Walkie-Talkie)", "ru": "📻 Рация", "en": "📻 Walkie-Talkie",
-        "filter": "highpass=f=900,lowpass=f=3200,volume=2.5,acrusher=bits=8:mix=0.5:mode=log",
-        "desc_uz": "Politsiya / maxsus xizmat ratsiyasi",
-        "desc_ru": "Полицейская служебная рация",
-        "desc_en": "Police tactical walkie-talkie"
+        "uz": "📻 Ratsiya (Police Radio)", "ru": "📻 Полицейская рация", "en": "📻 Police Walkie-Talkie",
+        "filter": "highpass=f=900,lowpass=f=3000,equalizer=f=2200:t=q:w=2:g=8,volume=2.8,acrusher=bits=8:mix=0.4:mode=log",
+        "desc_uz": "Maxsus xizmat politsiya ratsiyasi ovozi",
+        "desc_ru": "Звук служебной рации спецслужб",
+        "desc_en": "Tactical police walkie-talkie with analog bandpass"
     },
+    # ☎️ Vintage 90s Telephone
     "telephone": {
-        "uz": "☎️ Eski telefon", "ru": "☎️ Старый телефон", "en": "☎️ Vintage Phone",
-        "filter": "bandpass=f=1600:w=1000,volume=2.2",
+        "uz": "☎️ Eski 90-yillar telefoni", "ru": "☎️ Старый телефон 90-х", "en": "☎️ Vintage Landline Phone",
+        "filter": "bandpass=f=1500:w=900,volume=2.6,highpass=f=500,lowpass=f=2500",
         "desc_uz": "90-yillardagi diskli uy telefoni ovozi",
-        "desc_ru": "Звук старого дискового телефона",
-        "desc_en": "90s landline telephone effect"
+        "desc_ru": "Звук старого дискового домашнего телефона",
+        "desc_en": "90s landline telephone speaker"
     },
+    # 🏔 Mountain Cave Echo
     "echo": {
-        "uz": "🏔 Aks-sado (Echo / G'or)", "ru": "🏔 Эхо / Пещера", "en": "🏔 Echo / Cave",
-        "filter": "aecho=0.8:0.88:400|800:0.5|0.3",
-        "desc_uz": "Tog'lar yoki katta g'ordagi aks-sado",
-        "desc_ru": "Эхо в горах или огромной пещере",
-        "desc_en": "Deep mountain cave echo effect"
+        "uz": "🏔 Aks-sado (Grand Echo)", "ru": "🏔 Эхо в горах / Пещера", "en": "🏔 Grand Canyon Echo",
+        "filter": "aecho=0.85:0.88:350|700|1050:0.5|0.35|0.2,treble=g=2",
+        "desc_uz": "Tog'lar yoki katta g'ordagi tiniq aks-sado",
+        "desc_ru": "Красивое объемное эхо в горах или пещере",
+        "desc_en": "Deep spatial cave / grand canyon echo"
     },
+    # ⚡ Fast 1.5x
     "fast": {
         "uz": "⚡ Tezlashtirilgan (1.5x)", "ru": "⚡ Ускорение (1.5x)", "en": "⚡ Fast (1.5x)",
         "filter": "atempo=1.5",
@@ -119,6 +133,7 @@ VOICE_EFFECTS = {
         "desc_ru": "Быстрая динамичная речь",
         "desc_en": "Quick accelerated speech"
     },
+    # 🐢 Slow 0.7x
     "slow": {
         "uz": "🐢 Sekinlashtirilgan (0.7x)", "ru": "🐢 Замедление (0.7x)", "en": "🐢 Slow (0.7x)",
         "filter": "atempo=0.7",
@@ -126,6 +141,7 @@ VOICE_EFFECTS = {
         "desc_ru": "Медленная размеренная речь",
         "desc_en": "Slow and relaxed speech"
     },
+    # 🔄 Reverse
     "reverse": {
         "uz": "🔄 Orqaga (Reverse)", "ru": "🔄 Задом наперед", "en": "🔄 Reverse Audio",
         "filter": "areverse",
@@ -133,12 +149,13 @@ VOICE_EFFECTS = {
         "desc_ru": "Воспроизведение голоса задом наперед",
         "desc_en": "Plays audio backwards in reverse"
     },
+    # 🎧 8D Audio 360 Spatial
     "audio8d": {
-        "uz": "🎧 8D Ovoz (Aylanma)", "ru": "🎧 8D Аудио", "en": "🎧 8D Audio",
-        "filter": "apulsator=hz=0.2:amount=1",
-        "desc_uz": "Quloqchinlarda aylanib eshitiluvchi ovoz",
-        "desc_ru": "Голос вращается вокруг головы в наушниках",
-        "desc_en": "Pans seamlessly in 360 degrees"
+        "uz": "🎧 8D Ovoz (360 Aylanma)", "ru": "🎧 8D Аудио (360°)", "en": "🎧 8D Spatial Audio",
+        "filter": "apulsator=hz=0.18:amount=1,aecho=0.8:0.7:100:0.2",
+        "desc_uz": "Quloqchinlarda bosh atrofida 360° aylanuvchi ovoz",
+        "desc_ru": "Голос плавно вращается вокруг головы в наушниках",
+        "desc_en": "360-degree spatial panning around head"
     }
 }
 
