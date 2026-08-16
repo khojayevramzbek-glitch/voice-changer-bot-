@@ -3,8 +3,9 @@ import logging
 import sys
 import uuid
 import time
+from datetime import datetime
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 # Ensure UTF-8 output on Windows console
 if sys.platform == "win32":
@@ -19,12 +20,12 @@ from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart, Command
 from aiogram.types import (
     Message, CallbackQuery, FSInputFile,
-    InlineQuery, InlineQueryResultVoice, InlineQueryResultArticle,
+    InlineQuery, InlineQueryResultArticle,
     InputTextMessageContent
 )
 from aiogram.client.default import DefaultBotProperties
 
-from config import BOT_TOKEN, TEMP_DIR
+from config import BOT_TOKEN, ADMIN_ID, TEMP_DIR
 from audio_processor import (
     apply_voice_effect, apply_ambience_effect, generate_tts,
     VOICE_EFFECTS, AMBIENCE_EFFECTS, TTS_VOICES
@@ -34,6 +35,11 @@ from keyboards import (
     get_main_menu_keyboard, get_voice_effects_keyboard,
     get_ambience_keyboard, get_tts_keyboard,
     get_after_effect_keyboard, get_language_keyboard
+)
+from database import (
+    register_user, increment_voice, increment_tts,
+    get_statistics, get_recent_users, get_all_user_ids,
+    set_admin_id, get_admin_id
 )
 
 # Configure logging
@@ -46,6 +52,23 @@ logger = logging.getLogger("VoiceChangerBot")
 # In-memory storage for pending audio and text sessions
 AUDIO_STORAGE: Dict[str, dict] = {}
 TEXT_STORAGE: Dict[str, dict] = {}
+
+
+def get_current_admin_id() -> Optional[int]:
+    """Returns the effective admin ID from config or database."""
+    if ADMIN_ID:
+        return ADMIN_ID
+    return get_admin_id()
+
+
+async def notify_admin(bot: Bot, text: str):
+    """Sends live notifications to the bot owner/admin."""
+    admin_id = get_current_admin_id()
+    if admin_id:
+        try:
+            await bot.send_message(chat_id=admin_id, text=text, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            logger.debug("Could not notify admin %s: %s", admin_id, e)
 
 
 async def cleanup_old_files():
@@ -76,12 +99,31 @@ dp = Dispatcher()
 # ---------------------- COMMAND HANDLERS ----------------------
 
 @dp.message(CommandStart())
-async def cmd_start(message: Message):
-    """Start command handler with main menu and greetings."""
+async def cmd_start(message: Message, bot: Bot):
+    """Start command handler with live admin notification and analytics."""
     user_id = message.from_user.id if message.from_user else 0
     name = message.from_user.first_name if message.from_user else "Do'stim"
+    username = message.from_user.username if message.from_user else None
 
-    # Default language based on user's Telegram language code
+    # Track in SQLite database
+    is_new, _ = register_user(user_id, username, name)
+
+    # Auto-claim admin if no admin is set yet
+    if not get_current_admin_id():
+        set_admin_id(user_id)
+
+    # Notify admin on new user
+    if is_new:
+        u_tag = f"@{username}" if username else "username yo'q"
+        await notify_admin(
+            bot,
+            f"🔔 <b>Yangi foydalanuvchi kirdi!</b>\n"
+            f"👤 <b>Ism:</b> {name}\n"
+            f"🔗 <b>Username:</b> {u_tag}\n"
+            f"🆔 <b>ID:</b> <code>{user_id}</code>"
+        )
+
+    # Default language
     if message.from_user and message.from_user.language_code:
         lang_code = message.from_user.language_code[:2].lower()
         if lang_code in ("ru", "en"):
@@ -96,6 +138,71 @@ async def cmd_start(message: Message):
         reply_markup=get_main_menu_keyboard(user_id),
         parse_mode=ParseMode.HTML
     )
+
+
+@dp.message(Command("admin"))
+@dp.message(Command("stats"))
+async def cmd_stats(message: Message):
+    """Shows analytics and admin dashboard to the bot owner."""
+    user_id = message.from_user.id if message.from_user else 0
+    admin_id = get_current_admin_id()
+
+    if admin_id and user_id != admin_id:
+        await message.reply("⛔ Bu buyruq faqat bot administratori uchun.")
+        return
+
+    stats = get_statistics()
+    recent = get_recent_users(8)
+
+    recent_text = ""
+    for idx, u in enumerate(recent, 1):
+        dt = datetime.fromtimestamp(u["last_active"]).strftime("%H:%M %d/%m")
+        u_name = u["first_name"] or "Noma'lum"
+        u_tag = f"(@{u['username']})" if u["username"] else ""
+        recent_text += f"{idx}. <b>{u_name}</b> {u_tag} — <i>{dt}</i> (🎙{u['voice_count']})\n"
+
+    text = (
+        "📊 <b>BOTNING STATISTIKASI VA ADMIN PANELI</b>\n\n"
+        f"👥 <b>Jami foydalanuvchilar:</b> {stats['total_users']} ta\n"
+        f"🎙 <b>O'zgartirilgan ovozlar:</b> {stats['total_voices']} ta\n"
+        f"✍️ <b>Matndan qilingan ovozlar (TTS):</b> {stats['total_tts']} ta\n\n"
+        "🕒 <b>Oxirgi kirgan foydalanuvchilar:</b>\n"
+        f"{recent_text if recent_text else 'Hozircha foydalanuvchilar yoq.'}\n"
+        "📢 <i>Barcha foydalanuvchilarga xabar tarqatish: /send [xabar matni]</i>"
+    )
+    await message.answer(text, parse_mode=ParseMode.HTML)
+
+
+@dp.message(Command("send"))
+@dp.message(Command("broadcast"))
+async def cmd_broadcast(message: Message, bot: Bot):
+    """Broadcasts a message to all bot users."""
+    user_id = message.from_user.id if message.from_user else 0
+    admin_id = get_current_admin_id()
+
+    if admin_id and user_id != admin_id:
+        await message.reply("⛔ Bu buyruq faqat bot administratori uchun.")
+        return
+
+    text_to_send = message.text.replace("/send", "", 1).replace("/broadcast", "", 1).strip()
+    if not text_to_send:
+        await message.reply("⚠️ Xabar matnini kiriting!\nMisol: <code>/send Yangi ovoz effektlari qo'shildi!</code>", parse_mode=ParseMode.HTML)
+        return
+
+    user_ids = get_all_user_ids()
+    sent_count = 0
+
+    status_msg = await message.reply(f"📤 {len(user_ids)} ta foydalanuvchiga xabar yuborilmoqda...")
+
+    for u_id in user_ids:
+        try:
+            await bot.send_message(chat_id=u_id, text=f"📢 <b>Bot Yangiligi:</b>\n\n{text_to_send}", parse_mode=ParseMode.HTML)
+            sent_count += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            pass
+
+    await status_msg.edit_text(f"✅ Xabar <b>{sent_count} / {len(user_ids)}</b> ta foydalanuvchiga yetkazildi!", parse_mode=ParseMode.HTML)
 
 
 @dp.message(Command("help"))
@@ -154,6 +261,8 @@ async def handle_incoming_voice(message: Message, bot: Bot):
     user_id = message.from_user.id if message.from_user else 0
     file_token = uuid.uuid4().hex[:10]
 
+    register_user(user_id, message.from_user.username if message.from_user else None, message.from_user.first_name if message.from_user else None)
+
     status_msg = await message.reply(t(user_id, "voice_received"), parse_mode=ParseMode.HTML)
 
     try:
@@ -178,7 +287,9 @@ async def handle_incoming_voice(message: Message, bot: Bot):
         AUDIO_STORAGE[file_token] = {
             "path": dest_path,
             "user_id": user_id,
-            "created_at": time.time()
+            "created_at": time.time(),
+            "first_name": message.from_user.first_name if message.from_user else "Foydalanuvchi",
+            "username": message.from_user.username if message.from_user else None
         }
 
         keyboard = get_voice_effects_keyboard(file_token, user_id, page=1)
@@ -200,6 +311,8 @@ async def handle_text_input(message: Message):
     user_id = message.from_user.id if message.from_user else 0
     text_content = message.text.strip()
 
+    register_user(user_id, message.from_user.username if message.from_user else None, message.from_user.first_name if message.from_user else None)
+
     if len(text_content) > 500:
         await message.reply("⚠️ Matn juda uzun. Iltimos, 500 belgidan oshmagan matn yuboring.")
         return
@@ -208,7 +321,9 @@ async def handle_text_input(message: Message):
     TEXT_STORAGE[text_token] = {
         "text": text_content,
         "user_id": user_id,
-        "created_at": time.time()
+        "created_at": time.time(),
+        "first_name": message.from_user.first_name if message.from_user else "Foydalanuvchi",
+        "username": message.from_user.username if message.from_user else None
     }
 
     keyboard = get_tts_keyboard(text_token, user_id)
@@ -291,6 +406,14 @@ async def handle_effect_callback(callback: CallbackQuery, bot: Bot):
             await proc_msg.edit_text(t(user_id, "error_processing"))
             return
 
+        # Track usage in DB
+        increment_voice(user_id)
+
+        # Notify Admin
+        u_name = data.get("first_name", "Foydalanuvchi")
+        u_tag = f"(@{data.get('username')})" if data.get("username") else ""
+        await notify_admin(bot, f"🎙 <b>{u_name}</b> {u_tag} ➡️ {effect_name}")
+
         bot_info = await bot.get_me()
         bot_username = bot_info.username or "voicechangerautobot"
 
@@ -343,6 +466,8 @@ async def handle_ambience_callback(callback: CallbackQuery, bot: Bot):
             await proc_msg.edit_text(t(user_id, "error_processing"))
             return
 
+        increment_voice(user_id)
+
         bot_info = await bot.get_me()
         bot_username = bot_info.username or "voicechangerautobot"
 
@@ -390,11 +515,14 @@ async def handle_tts_callback(callback: CallbackQuery, bot: Bot):
             await proc_msg.edit_text(t(user_id, "error_processing"))
             return
 
-        # Store generated audio in AUDIO_STORAGE so user can apply effects to it!
+        increment_tts(user_id)
+
         AUDIO_STORAGE[file_token] = {
             "path": output_path,
             "user_id": user_id,
-            "created_at": time.time()
+            "created_at": time.time(),
+            "first_name": data.get("first_name", "Foydalanuvchi"),
+            "username": data.get("username")
         }
 
         bot_info = await bot.get_me()
@@ -483,7 +611,6 @@ async def handle_inline_query(inline_query: InlineQuery, bot: Bot):
     results = []
 
     if not query:
-        # Show prompt to type text
         results.append(
             InlineQueryResultArticle(
                 id="hint",
@@ -498,7 +625,6 @@ async def handle_inline_query(inline_query: InlineQuery, bot: Bot):
         await inline_query.answer(results, cache_time=5, is_personal=True)
         return
 
-    # Generate inline options
     bot_info = await bot.get_me()
     bot_username = bot_info.username or "voicechangerautobot"
 
@@ -558,7 +684,7 @@ async def main():
         me = await bot.get_me()
         print("\n" + "=" * 60)
         print(f"🤖 Bot ishga tushdi: @{me.username} ({me.first_name})")
-        print("🎙 Voice Changer & TTS Bot 24/7 tayyor!")
+        print("🎙 Voice Changer, TTS & Analytics Bot 24/7 tayyor!")
         print("=" * 60 + "\n")
     except Exception as e:
         print(f"❌ Ulanishda xatolik: {e}")

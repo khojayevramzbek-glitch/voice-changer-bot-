@@ -142,31 +142,31 @@ VOICE_EFFECTS = {
     }
 }
 
-# Atmospheric Background Sounds synthesized via FFmpeg filters
+# Atmospheric Background Sounds synthesized via rich FFmpeg audio filters
 AMBIENCE_EFFECTS = {
     "rain": {
         "uz": "🌧 Yomg'ir & Momaqaldiroq", "ru": "🌧 Дождь и гроза", "en": "🌧 Rain & Thunder",
-        "source": "anoisesrc=d=60:c=brown:r=48000:a=0.09,lowpass=f=2200,highpass=f=250",
-        "bg_vol": 0.35, "voice_vol": 1.2
+        "source": "anoisesrc=d=120:c=brown:r=48000:a=0.15,lowpass=f=2600,highpass=f=180,volume=2.0",
+        "bg_vol": 0.45, "voice_vol": 1.2
     },
     "ocean": {
         "uz": "🌊 Dengiz to'lqinlari", "ru": "🌊 Шум океана", "en": "🌊 Ocean Waves",
-        "source": "anoisesrc=d=60:c=pink:r=48000:a=0.14,tremolo=f=0.15:d=0.9,lowpass=f=1200",
-        "bg_vol": 0.4, "voice_vol": 1.2
+        "source": "anoisesrc=d=120:c=pink:r=48000:a=0.18,tremolo=f=0.12:d=0.95,lowpass=f=1300,volume=2.2",
+        "bg_vol": 0.5, "voice_vol": 1.2
     },
     "wind": {
         "uz": "💨 Bo'ron & Shamol", "ru": "💨 Ветер и буря", "en": "💨 Wind & Storm",
-        "source": "anoisesrc=d=60:c=pink:r=48000:a=0.12,tremolo=f=0.4:d=0.7,bandpass=f=600:w=400",
-        "bg_vol": 0.3, "voice_vol": 1.2
+        "source": "anoisesrc=d=120:c=pink:r=48000:a=0.16,tremolo=f=0.35:d=0.8,bandpass=f=650:w=450,volume=2.0",
+        "bg_vol": 0.4, "voice_vol": 1.2
     },
     "fireplace": {
         "uz": "🔥 Kamin / Gulxan", "ru": "🔥 Уютный камин", "en": "🔥 Fireplace",
-        "source": "anoisesrc=d=60:c=brown:r=48000:a=0.08,highpass=f=1800,volume=2.5",
-        "bg_vol": 0.35, "voice_vol": 1.2
+        "source": "anoisesrc=d=120:c=brown:r=48000:a=0.12,highpass=f=1600,volume=2.8",
+        "bg_vol": 0.45, "voice_vol": 1.2
     },
     "cinematic": {
         "uz": "🎬 Epik Kinematik Zal", "ru": "🎬 Кинематографичный зал", "en": "🎬 Cinematic Hall",
-        "source": "anoisesrc=d=60:c=brown:r=48000:a=0.04,lowpass=f=500",
+        "source": "anoisesrc=d=120:c=brown:r=48000:a=0.04,lowpass=f=500",
         "bg_vol": 0.2, "voice_vol": 1.2,
         "voice_extra_filter": "aecho=0.8:0.9:500|1000:0.4|0.25,bass=g=8:f=100"
     }
