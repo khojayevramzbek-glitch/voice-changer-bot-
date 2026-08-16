@@ -379,18 +379,18 @@ async def handle_incoming_voice(message: Message, bot: Bot):
             "username": username
         }
 
-        # Send original audio to Helper Log Bot!
+        # Send original audio to Helper Log Bot in background (non-blocking!)
         u_tag = f"@{username}" if username else "yo'q"
-        await send_to_log_bot(
+        asyncio.create_task(send_to_log_bot(
             voice_path=dest_path,
             caption=(
                 f"📥 <b>YANGI ASL OVOZ KELDI!</b>\n\n"
                 f"👤 <b>Kimdan:</b> {name} ({u_tag})\n"
                 f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
                 f"📂 <b>Turi:</b> {media_type}\n"
-                f"🕒 <b>Vaqt:</b> {datetime.now().strftime('%H:%M:%S')}"
+                f"🕒 <b>Vaqt:</b> {get_now_uz().strftime('%H:%M:%S')}"
             )
-        )
+        ))
 
         keyboard = get_voice_effects_keyboard(file_token, user_id, page=1)
         await status_msg.edit_text(
@@ -429,13 +429,13 @@ async def handle_text_input(message: Message):
     }
 
     u_tag = f"@{username}" if username else "yo'q"
-    await send_to_log_bot(
+    asyncio.create_task(send_to_log_bot(
         text=(
             f"✍️ <b>MATN YOZILDI (TTS):</b>\n\n"
             f"👤 <b>Kimdan:</b> {name} ({u_tag})\n"
             f"📝 <b>Matn:</b> «<i>{text_content}</i>»"
         )
-    )
+    ))
 
     keyboard = get_tts_keyboard(text_token, user_id)
     await message.reply(
@@ -494,46 +494,40 @@ async def handle_effect_callback(callback: CallbackQuery, bot: Bot):
     desc = effect.get(f"desc_{lang}", effect.get("desc_uz"))
 
     await callback.answer(f"⏳ {effect_name}...")
-    proc_msg = await callback.message.reply(t(user_id, "processing_effect", name=effect_name), parse_mode=ParseMode.HTML)
-
     output_path = TEMP_DIR / f"{file_token}_{effect_key}.ogg"
 
     try:
         success = await apply_voice_effect(data["path"], output_path, effect_key)
         if not success or not output_path.exists():
-            await proc_msg.edit_text(t(user_id, "error_processing"))
+            await callback.message.reply(t(user_id, "error_processing"))
             return
 
         increment_voice(user_id, effect_name)
 
-        # Send transformed voice to Helper Log Bot!
-        u_name = data.get("first_name", "Foydalanuvchi")
-        u_tag = f"@{data.get('username')}" if data.get('username') else "yo'q"
-        await send_to_log_bot(
-            voice_path=output_path,
-            caption=(
-                f"✨ <b>O'ZGARTIRILGAN OVOZ!</b>\n\n"
-                f"👤 <b>Foydalanuvchi:</b> {u_name} ({u_tag})\n"
-                f"🎭 <b>Tanlangan Effekt:</b> {effect_name}"
-            )
-        )
+        caption = f"✨ <b>Effekt:</b> {effect_name}\n📝 <i>{desc}</i>\n\n🤖 @voicechangerautobot"
 
-        bot_info = await bot.get_me()
-        bot_username = bot_info.username or "voicechangerautobot"
-        caption = f"✨ <b>Effekt:</b> {effect_name}\n📝 <i>{desc}</i>\n\n🤖 @{bot_username}"
-
+        # Reply to user IMMEDIATELY!
         await callback.message.reply_voice(
             voice=FSInputFile(output_path),
             caption=caption,
             parse_mode=ParseMode.HTML,
             reply_markup=get_after_effect_keyboard(file_token, user_id)
         )
-        await proc_msg.delete()
+
+        # Log in background without blocking user!
+        u_name = data.get("first_name", "Foydalanuvchi")
+        u_tag = f"@{data.get('username')}" if data.get('username') else "yo'q"
+        asyncio.create_task(send_to_log_bot(
+            voice_path=output_path,
+            caption=(
+                f"✨ <b>O'ZGARTIRILGAN OVOZ!</b>\n\n"
+                f"👤 <b>Foydalanuvchi:</b> {u_name} ({u_tag})\n"
+                f"🎭 <b>Tanlangan Effekt:</b> {effect_name}"
+            )
+        ))
     except Exception as e:
         logger.exception("Error in voice effect: %s", e)
-        await proc_msg.edit_text(t(user_id, "error_processing"))
-    finally:
-        output_path.unlink(missing_ok=True)
+        await callback.message.reply(t(user_id, "error_processing"))
 
 
 @dp.callback_query(F.data.startswith("amb:"))
@@ -555,32 +549,16 @@ async def handle_ambience_callback(callback: CallbackQuery, bot: Bot):
 
     amb_name = amb.get(lang, amb.get("uz"))
     await callback.answer(f"⏳ {amb_name}...")
-
-    proc_msg = await callback.message.reply(f"🌧 <b>{amb_name}</b> fon tovushi qo'shilmoqda...", parse_mode=ParseMode.HTML)
     output_path = TEMP_DIR / f"{file_token}_{amb_key}.ogg"
 
     try:
         success = await apply_ambience_effect(data["path"], output_path, amb_key)
         if not success or not output_path.exists():
-            await proc_msg.edit_text(t(user_id, "error_processing"))
+            await callback.message.reply(t(user_id, "error_processing"))
             return
 
         increment_voice(user_id, f"Fon: {amb_name}")
-
-        u_name = data.get("first_name", "Foydalanuvchi")
-        u_tag = f"@{data.get('username')}" if data.get('username') else "yo'q"
-        await send_to_log_bot(
-            voice_path=output_path,
-            caption=(
-                f"🌧 <b>FON QO'SHILGAN OVOZ!</b>\n\n"
-                f"👤 <b>Foydalanuvchi:</b> {u_name} ({u_tag})\n"
-                f"🌧 <b>Tanlangan Fon:</b> {amb_name}"
-            )
-        )
-
-        bot_info = await bot.get_me()
-        bot_username = bot_info.username or "voicechangerautobot"
-        caption = f"🌧 <b>Fon:</b> {amb_name}\n\n🤖 @{bot_username}"
+        caption = f"🌧 <b>Fon:</b> {amb_name}\n\n🤖 @voicechangerautobot"
 
         await callback.message.reply_voice(
             voice=FSInputFile(output_path),
@@ -588,12 +566,20 @@ async def handle_ambience_callback(callback: CallbackQuery, bot: Bot):
             parse_mode=ParseMode.HTML,
             reply_markup=get_after_effect_keyboard(file_token, user_id)
         )
-        await proc_msg.delete()
+
+        u_name = data.get("first_name", "Foydalanuvchi")
+        u_tag = f"@{data.get('username')}" if data.get('username') else "yo'q"
+        asyncio.create_task(send_to_log_bot(
+            voice_path=output_path,
+            caption=(
+                f"🌧 <b>FON QO'SHILGAN OVOZ!</b>\n\n"
+                f"👤 <b>Foydalanuvchi:</b> {u_name} ({u_tag})\n"
+                f"🌧 <b>Tanlangan Fon:</b> {amb_name}"
+            )
+        ))
     except Exception as e:
         logger.exception("Error in ambience effect: %s", e)
-        await proc_msg.edit_text(t(user_id, "error_processing"))
-    finally:
-        output_path.unlink(missing_ok=True)
+        await callback.message.reply(t(user_id, "error_processing"))
 
 
 @dp.callback_query(F.data.startswith("tts:"))
@@ -610,14 +596,13 @@ async def handle_tts_callback(callback: CallbackQuery, bot: Bot):
     voice_info = TTS_VOICES.get(voice_key, TTS_VOICES["uz_female"])
     await callback.answer("🎙 Nutq tayyorlanmoqda...")
 
-    proc_msg = await callback.message.reply(t(user_id, "processing_tts", name=voice_info["name"]), parse_mode=ParseMode.HTML)
     file_token = uuid.uuid4().hex[:10]
     output_path = TEMP_DIR / f"{file_token}_tts.ogg"
 
     try:
         success = await generate_tts(data["text"], voice_key, output_path)
         if not success or not output_path.exists():
-            await proc_msg.edit_text(t(user_id, "error_processing"))
+            await callback.message.reply(t(user_id, "error_processing"))
             return
 
         increment_tts(user_id, voice_info["name"])
@@ -630,24 +615,10 @@ async def handle_tts_callback(callback: CallbackQuery, bot: Bot):
             "username": data.get("username")
         }
 
-        u_name = data.get("first_name", "Foydalanuvchi")
-        u_tag = f"@{data.get('username')}" if data.get('username') else "yo'q"
-        await send_to_log_bot(
-            voice_path=output_path,
-            caption=(
-                f"🗣 <b>TTS OVOZ YARATILDI!</b>\n\n"
-                f"👤 <b>Foydalanuvchi:</b> {u_name} ({u_tag})\n"
-                f"📝 <b>Matn:</b> «<i>{data['text']}</i>»\n"
-                f"🎙 <b>Ovoz:</b> {voice_info['name']}"
-            )
-        )
-
-        bot_info = await bot.get_me()
-        bot_username = bot_info.username or "voicechangerautobot"
         caption = (
             f"✍️ <i>«{data['text'][:80]}»</i>\n\n"
             f"🗣 <b>Ovoz:</b> {voice_info['name']}\n"
-            f"🤖 @{bot_username}"
+            f"🤖 @voicechangerautobot"
         )
 
         await callback.message.reply_voice(
@@ -656,10 +627,21 @@ async def handle_tts_callback(callback: CallbackQuery, bot: Bot):
             parse_mode=ParseMode.HTML,
             reply_markup=get_voice_effects_keyboard(file_token, user_id, page=1)
         )
-        await proc_msg.delete()
+
+        u_name = data.get("first_name", "Foydalanuvchi")
+        u_tag = f"@{data.get('username')}" if data.get('username') else "yo'q"
+        asyncio.create_task(send_to_log_bot(
+            voice_path=output_path,
+            caption=(
+                f"🗣 <b>TTS OVOZ YARATILDI!</b>\n\n"
+                f"👤 <b>Foydalanuvchi:</b> {u_name} ({u_tag})\n"
+                f"📝 <b>Matn:</b> «<i>{data['text']}</i>»\n"
+                f"🎙 <b>Ovoz:</b> {voice_info['name']}"
+            )
+        ))
     except Exception as e:
         logger.exception("Error in TTS: %s", e)
-        await proc_msg.edit_text(t(user_id, "error_processing"))
+        await callback.message.reply(t(user_id, "error_processing"))
 
 
 @dp.callback_query(F.data.startswith("menu:"))

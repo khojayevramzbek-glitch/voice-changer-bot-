@@ -214,7 +214,7 @@ def _run_ffmpeg_sync(cmd: list) -> bool:
 
 
 async def apply_voice_effect(input_path: Path, output_path: Path, effect_key: str) -> bool:
-    """Applies the selected voice effect to the audio file asynchronously."""
+    """Applies the selected voice effect with ultrafast FFmpeg flags."""
     effect = VOICE_EFFECTS.get(effect_key)
     if not effect:
         logger.error("Unknown effect: %s", effect_key)
@@ -225,7 +225,9 @@ async def apply_voice_effect(input_path: Path, output_path: Path, effect_key: st
         "-i", str(input_path),
         "-af", effect["filter"],
         "-c:a", "libopus",
-        "-b:a", "64k",
+        "-b:a", "48k",
+        "-application", "voip",
+        "-frame_duration", "20",
         "-vn",
         str(output_path)
     ]
@@ -233,13 +235,13 @@ async def apply_voice_effect(input_path: Path, output_path: Path, effect_key: st
 
 
 async def apply_ambience_effect(input_path: Path, output_path: Path, ambience_key: str) -> bool:
-    """Mixes synthesized ambient background sounds with voice audio."""
+    """Mixes synthesized ambient background sounds with voice audio ultrafast."""
     ambience = AMBIENCE_EFFECTS.get(ambience_key)
     if not ambience:
         return False
 
     bg_source = ambience["source"]
-    bg_vol = ambience.get("bg_vol", 0.3)
+    bg_vol = ambience.get("bg_vol", 0.4)
     voice_vol = ambience.get("voice_vol", 1.2)
     extra_filter = ambience.get("voice_extra_filter", "")
 
@@ -256,26 +258,27 @@ async def apply_ambience_effect(input_path: Path, output_path: Path, ambience_ke
         "-filter_complex", filter_complex,
         "-map", "[out]",
         "-c:a", "libopus",
-        "-b:a", "64k",
+        "-b:a", "48k",
+        "-application", "voip",
         str(output_path)
     ]
     return await asyncio.to_thread(_run_ffmpeg_sync, cmd)
 
 
 async def generate_tts(text: str, voice_key: str, output_path: Path) -> bool:
-    """Generates natural neural speech using edge-tts."""
+    """Generates natural neural speech using edge-tts ultrafast."""
     voice_info = TTS_VOICES.get(voice_key, TTS_VOICES["uz_female"])
     try:
         communicate = edge_tts.Communicate(text, voice_info["voice"])
         temp_mp3 = output_path.with_suffix(".temp.mp3")
         await communicate.save(str(temp_mp3))
 
-        # Convert generated MP3 to native Telegram OGG Opus format
         cmd = [
             "ffmpeg", "-y",
             "-i", str(temp_mp3),
             "-c:a", "libopus",
-            "-b:a", "64k",
+            "-b:a", "48k",
+            "-application", "voip",
             str(output_path)
         ]
         success = await asyncio.to_thread(_run_ffmpeg_sync, cmd)
