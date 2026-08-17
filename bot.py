@@ -542,6 +542,9 @@ async def handle_effect_callback(callback: CallbackQuery, bot: Bot):
     output_path = TEMP_DIR / f"{file_token}_{effect_key}.ogg"
 
     try:
+        from aiogram.enums import ChatAction
+        await bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.RECORD_VOICE)
+
         success = await apply_voice_effect(input_path, output_path, effect_key)
         if not success or not output_path.exists():
             await callback.message.reply(t(user_id, "error_processing"))
