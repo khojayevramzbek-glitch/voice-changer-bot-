@@ -891,27 +891,48 @@ async def run_health_server():
 
 # ---------------------- MAIN ENTRYPOINT ----------------------
 
+async def self_ping_task():
+    """Pings self every 10 minutes to prevent Render free tier from sleeping."""
+    import os
+    import aiohttp
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "https://voice-changer-bot-5pts.onrender.com").rstrip("/")
+    health_url = f"{render_url}/health"
+
+    await asyncio.sleep(60) # Wait 1 minute after boot
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.get(health_url, timeout=15) as resp:
+                    logger.info("Self keep-alive ping status: %s", resp.status)
+            except Exception as e:
+                logger.warning("Self keep-alive ping error: %s", e)
+            await asyncio.sleep(600) # Ping every 10 minutes
+
+
 async def main():
-    try:
-        me = await main_bot.get_me()
-        print("\n" + "=" * 60)
-        print(f"🤖 Asosiy Bot: @{me.username} ({me.first_name})")
-        log_me = await log_bot.get_me()
-        print(f"🕵️‍♂️ Yordamchi Log Bot: @{log_me.username} ({log_me.first_name})")
-        print("🎙 Voice Changer & Deep Analytics Bot 24/7 online!")
-        print("=" * 60 + "\n")
-    except Exception as e:
-        print(f"❌ Ulanishda xatolik: {e}")
-        return
-
-    asyncio.create_task(cleanup_old_files())
+    # 1. Start HTTP Health check server IMMEDIATELY so Render gets instant 200 OK!
     await run_health_server()
+    asyncio.create_task(cleanup_old_files())
+    asyncio.create_task(self_ping_task())
 
-    # Run polling for both bots concurrently without signal collisions
-    await asyncio.gather(
-        dp.start_polling(main_bot, handle_signals=True),
-        log_dp.start_polling(log_bot, handle_signals=False)
-    )
+    # 2. Resilient polling loop that auto-recovers from any network glitch
+    while True:
+        try:
+            me = await main_bot.get_me()
+            log_me = await log_bot.get_me()
+            logger.info("🤖 Main Bot: @%s | 🕵️‍♂️ Log Bot: @%s", me.username, log_me.username)
+            logger.info("🎙 Voice Changer & Analytics Bot running 24/7!")
+
+            # Run polling for both bots concurrently without signal collisions
+            await asyncio.gather(
+                dp.start_polling(main_bot, handle_signals=True),
+                log_dp.start_polling(log_bot, handle_signals=False)
+            )
+        except (KeyboardInterrupt, SystemExit):
+            break
+        except Exception as e:
+            logger.error("Polling error encountered: %s. Reconnecting in 5s...", e)
+            await asyncio.sleep(5)
 
 
 if __name__ == "__main__":
