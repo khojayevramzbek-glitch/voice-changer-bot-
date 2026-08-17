@@ -17,13 +17,23 @@ VOICE_EFFECTS = {
     "ai_roger": {
         "uz": "👴 AI Qari Bobo (ElevenLabs)", "ru": "👴 AI Мудрый Дедушка (ElevenLabs)", "en": "👴 AI Roger Grandfather (ElevenLabs)",
         "elevenlabs_id": "CwhRBWXzGAHq8TQ4Fs17",
+        "gender": "male",
         "desc_uz": "ElevenLabs sun'iy intellekti orqali 100% haqiqiy qari oqsoqol ovozi",
         "desc_ru": "100% реалистичный голос мудрого дедушки от ElevenLabs AI",
         "desc_en": "Hyper-realistic authentic elderly grandfather voice powered by ElevenLabs"
     },
+    "ai_bella": {
+        "uz": "👩‍🦰 AI Qiz Bola / Ayol (ElevenLabs)", "ru": "👩‍🦰 AI Девушка / Женский (ElevenLabs)", "en": "👩‍🦰 AI Bella Female (ElevenLabs)",
+        "elevenlabs_id": "EXAVITQu4vr4xnSDxMaL",
+        "gender": "female",
+        "desc_uz": "100% tabiiy, mayin va yoqimli qiz bola / ayol ovozi",
+        "desc_ru": "100% естественный и приятный голос девушки / женщины",
+        "desc_en": "Hyper-realistic sweet and natural young female voice"
+    },
     "ai_george": {
         "uz": "🎬 AI Gollivud Diktor (ElevenLabs)", "ru": "🎬 AI Голливудский Диктор (ElevenLabs)", "en": "🎬 AI Cinema Narrator (ElevenLabs)",
         "elevenlabs_id": "JBFqnCBsd6RMkjVDRZzb",
+        "gender": "male",
         "desc_uz": "Gollivud filmlari va treylerlaridagi chuqur diktor ovozi",
         "desc_ru": "Глубокий дикторский голос трейлеров Голливуда",
         "desc_en": "Deep cinematic movie narrator persona"
@@ -31,14 +41,16 @@ VOICE_EFFECTS = {
     "ai_callum": {
         "uz": "🦸‍♂️ AI Ekshn Qahramon (ElevenLabs)", "ru": "🦸‍♂️ AI Герой Экшна (ElevenLabs)", "en": "🦸‍♂️ AI Action Hero (ElevenLabs)",
         "elevenlabs_id": "N2lVS1w4EtoT3dr4eOWO",
+        "gender": "male",
         "desc_uz": "Ekshn filmlar va o'yinlardagi kuchli jangchi qahramon ovozi",
         "desc_ru": "Голос брутального героя экшн-фильмов и игр",
         "desc_en": "Intense action movie hero persona"
     },
-    "ai_charlotte": {
-        "uz": "✨ AI Latofatli Ayol (ElevenLabs)", "ru": "✨ AI Женский Голос (ElevenLabs)", "en": "✨ AI Charlotte (ElevenLabs)",
-        "elevenlabs_id": "XB0fDUnXU5powFXDhCwa",
-        "desc_uz": "ElevenLabs sun'iy intellektining mayin va jozibali ayol ovozi",
+    "ai_lily": {
+        "uz": "👧 AI Madina (Mayin Qiz Ovozi)", "ru": "👧 AI Нежная Девушка (ElevenLabs)", "en": "👧 AI Lily (Sweet Female)",
+        "elevenlabs_id": "pFZP5JQG7iQjIQuC4Bku",
+        "gender": "female",
+        "desc_uz": "ElevenLabs sun'iy intellektining latofatli va nafis qiz ovozi",
         "desc_ru": "Нежный и реалистичный женский голос ElevenLabs",
         "desc_en": "Elegant seductive female persona"
     },
@@ -258,7 +270,7 @@ def _run_ffmpeg_sync(cmd: list) -> bool:
         return False
 
 
-async def convert_speech_to_speech_elevenlabs(input_audio: Path, voice_id: str, output_path: Path) -> bool:
+async def convert_speech_to_speech_elevenlabs(input_audio: Path, voice_id: str, output_path: Path, is_female: bool = False) -> bool:
     """
     Transforms any voice audio into realistic ElevenLabs AI personas with auto key-pool failover!
     """
@@ -268,17 +280,30 @@ async def convert_speech_to_speech_elevenlabs(input_audio: Path, voice_id: str, 
 
     url = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_id}"
 
-    # Prepare standard MP3 input
+    # Prepare standard MP3 input (with female formant conversion if target is female)
     temp_in = output_path.with_suffix(".in_sts.mp3")
-    cmd_prep = [
-        "ffmpeg", "-y",
-        "-i", str(input_audio),
-        "-vn",
-        "-ac", "1",
-        "-ar", "44100",
-        "-b:a", "128k",
-        str(temp_in)
-    ]
+    if is_female:
+        cmd_prep = [
+            "ffmpeg", "-y",
+            "-i", str(input_audio),
+            "-af", "asetrate=44100*1.32,aresample=44100,atempo=0.757,equalizer=f=3200:t=q:w=1.5:g=4,highpass=f=200",
+            "-vn",
+            "-ac", "1",
+            "-ar", "44100",
+            "-b:a", "128k",
+            str(temp_in)
+        ]
+    else:
+        cmd_prep = [
+            "ffmpeg", "-y",
+            "-i", str(input_audio),
+            "-vn",
+            "-ac", "1",
+            "-ar", "44100",
+            "-b:a", "128k",
+            str(temp_in)
+        ]
+
     if not _run_ffmpeg_sync(cmd_prep) or not temp_in.exists():
         return False
 
@@ -293,8 +318,8 @@ async def convert_speech_to_speech_elevenlabs(input_audio: Path, voice_id: str, 
                     data.add_field(
                         "voice_settings",
                         json.dumps({
-                            "similarity_boost": 0.40,
-                            "stability": 0.45,
+                            "similarity_boost": 0.35,
+                            "stability": 0.50,
                             "style": 0.0,
                             "use_speaker_boost": True
                         })
@@ -343,7 +368,13 @@ async def apply_voice_effect(input_path: Path, output_path: Path, effect_key: st
 
     # 1. ElevenLabs Speech-to-Speech AI
     if "elevenlabs_id" in effect:
-        success = await convert_speech_to_speech_elevenlabs(input_path, effect["elevenlabs_id"], output_path)
+        is_female = effect.get("gender") == "female"
+        success = await convert_speech_to_speech_elevenlabs(
+            input_path,
+            effect["elevenlabs_id"],
+            output_path,
+            is_female=is_female
+        )
         if success and output_path.exists():
             return True
         logger.warning("ElevenLabs fallback to DSP...")
