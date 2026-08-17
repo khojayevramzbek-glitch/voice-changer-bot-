@@ -16,7 +16,7 @@ VOICE_EFFECTS = {
     # 👴 Elderly Grandfather: Natural aged vocal tremor, warm throat body and elderly cadence
     "old_man": {
         "uz": "👴 Qari Chol (Oqsoqol Bobo)", "ru": "👴 Мудрый Старик / Дедушка", "en": "👴 Wise Old Grandfather",
-        "filter": "asetrate=48000*0.88,aresample=48000,atempo=1.136,vibrato=f=6.2:d=0.26,equalizer=f=320:t=q:w=1.8:g=5.5,equalizer=f=1800:t=q:w=2.0:g=4.0,lowpass=f=4400,compand=0.02|0.05:0.1|0.1:-60/-60|-25/-12|0/-1:5:0:0:0.02",
+        "filter": "asetrate=48000*0.86,aresample=48000,atempo=1.162,vibrato=f=5.0:d=0.34,tremolo=f=4.6:d=0.22,equalizer=f=360:t=q:w=1.5:g=6.5,equalizer=f=1700:t=q:w=2.0:g=4.5,lowpass=f=3800,highpass=f=90,compand=0.02|0.05:0.1|0.1:-60/-60|-25/-12|0/-1:5:0:0:0.02",
         "desc_uz": "Haqiqiy nordon va titroqli keksalar / qari oqsoqol bobo ovozi",
         "desc_ru": "Реалистичный хриплый и дрожащий голос пожилого дедушки",
         "desc_en": "Authentic realistic elderly grandfather voice with natural vocal tremor"
