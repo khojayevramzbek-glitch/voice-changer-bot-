@@ -11,11 +11,40 @@ static_ffmpeg.add_paths()
 
 logger = logging.getLogger(__name__)
 
-# 20+ Studio-Calibrated Professional Voice Effects
+# 25+ Studio-Calibrated Professional Voice Effects
 VOICE_EFFECTS = {
-    # 👴 Elderly Grandfather: Natural aged vocal tremor, warm throat body and elderly cadence
+    # 🌟 ElevenLabs Neural AI Personas (State of the art)
+    "ai_roger": {
+        "uz": "👴 AI Qari Bobo (ElevenLabs)", "ru": "👴 AI Мудрый Дедушка (ElevenLabs)", "en": "👴 AI Roger Grandfather (ElevenLabs)",
+        "elevenlabs_id": "CwhRBWXzGAHq8TQ4Fs17",
+        "desc_uz": "ElevenLabs sun'iy intellekti orqali 100% haqiqiy qari oqsoqol ovozi",
+        "desc_ru": "100% реалистичный голос мудрого дедушки от ElevenLabs AI",
+        "desc_en": "Hyper-realistic authentic elderly grandfather voice powered by ElevenLabs"
+    },
+    "ai_george": {
+        "uz": "🎬 AI Gollivud Diktor (ElevenLabs)", "ru": "🎬 AI Голливудский Диктор (ElevenLabs)", "en": "🎬 AI Cinema Narrator (ElevenLabs)",
+        "elevenlabs_id": "JBFqnCBsd6RMkjVDRZzb",
+        "desc_uz": "Gollivud filmlari va treylerlaridagi chuqur diktor ovozi",
+        "desc_ru": "Глубокий дикторский голос трейлеров Голливуда",
+        "desc_en": "Deep cinematic movie narrator persona"
+    },
+    "ai_callum": {
+        "uz": "🦸‍♂️ AI Ekshn Qahramon (ElevenLabs)", "ru": "🦸‍♂️ AI Герой Экшна (ElevenLabs)", "en": "🦸‍♂️ AI Action Hero (ElevenLabs)",
+        "elevenlabs_id": "N2lVS1w4EtoT3dr4eOWO",
+        "desc_uz": "Ekshn filmlar va o'yinlardagi kuchli jangchi qahramon ovozi",
+        "desc_ru": "Голос брутального героя экшн-фильмов и игр",
+        "desc_en": "Intense action movie hero persona"
+    },
+    "ai_charlotte": {
+        "uz": "✨ AI Latofatli Ayol (ElevenLabs)", "ru": "✨ AI Женский Голос (ElevenLabs)", "en": "✨ AI Charlotte (ElevenLabs)",
+        "elevenlabs_id": "XB0fDUnXU5powFXDhCwa",
+        "desc_uz": "ElevenLabs sun'iy intellektining mayin va jozibali ayol ovozi",
+        "desc_ru": "Нежный и реалистичный женский голос ElevenLabs",
+        "desc_en": "Elegant seductive female persona"
+    },
+    # 👴 Elderly Grandfather (DSP): Natural aged vocal tremor, warm throat body and elderly cadence
     "old_man": {
-        "uz": "👴 Qari Chol (Oqsoqol Bobo)", "ru": "👴 Мудрый Старик / Дедушка", "en": "👴 Wise Old Grandfather",
+        "uz": "👴 Qari Chol (DSP Classic)", "ru": "👴 Мудрый Старик (DSP)", "en": "👴 Wise Old Grandfather (DSP)",
         "filter": "asetrate=48000*0.86,aresample=48000,atempo=1.162,vibrato=f=5.0:d=0.34,tremolo=f=4.6:d=0.22,equalizer=f=360:t=q:w=1.5:g=6.5,equalizer=f=1700:t=q:w=2.0:g=4.5,lowpass=f=3800,highpass=f=90,compand=0.02|0.05:0.1|0.1:-60/-60|-25/-12|0/-1:5:0:0:0.02",
         "desc_uz": "Haqiqiy nordon va titroqli keksalar / qari oqsoqol bobo ovozi",
         "desc_ru": "Реалистичный хриплый и дрожащий голос пожилого дедушки",
@@ -229,17 +258,104 @@ def _run_ffmpeg_sync(cmd: list) -> bool:
         return False
 
 
+async def convert_speech_to_speech_elevenlabs(input_audio: Path, voice_id: str, output_path: Path) -> bool:
+    """
+    Transforms any voice audio into realistic ElevenLabs AI personas with auto key-pool failover!
+    """
+    import aiohttp
+    import json
+    from config import ELEVENLABS_KEYS
+
+    url = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_id}"
+
+    # Prepare standard MP3 input
+    temp_in = output_path.with_suffix(".in_sts.mp3")
+    cmd_prep = [
+        "ffmpeg", "-y",
+        "-i", str(input_audio),
+        "-vn",
+        "-ac", "1",
+        "-ar", "44100",
+        "-b:a", "128k",
+        str(temp_in)
+    ]
+    if not _run_ffmpeg_sync(cmd_prep) or not temp_in.exists():
+        return False
+
+    async with aiohttp.ClientSession() as session:
+        for key in ELEVENLABS_KEYS:
+            try:
+                headers = {"xi-api-key": key}
+                with open(temp_in, "rb") as f_audio:
+                    data = aiohttp.FormData()
+                    data.add_field("audio", f_audio, filename="audio.mp3", content_type="audio/mpeg")
+                    data.add_field("model_id", "eleven_multilingual_sts_v2")
+                    data.add_field(
+                        "voice_settings",
+                        json.dumps({
+                            "similarity_boost": 0.8,
+                            "stability": 0.5,
+                            "use_speaker_boost": True
+                        })
+                    )
+
+                    async with session.post(url, headers=headers, data=data, timeout=45) as resp:
+                        if resp.status == 200:
+                            res_bytes = await resp.read()
+                            temp_out = output_path.with_suffix(".out_sts.mp3")
+                            with open(temp_out, "wb") as f_out:
+                                f_out.write(res_bytes)
+
+                            # Convert to Telegram native OGG Opus
+                            cmd_conv = [
+                                "ffmpeg", "-y",
+                                "-i", str(temp_out),
+                                "-c:a", "libopus",
+                                "-b:a", "64k",
+                                "-application", "voip",
+                                str(output_path)
+                            ]
+                            success = _run_ffmpeg_sync(cmd_conv)
+                            temp_out.unlink(missing_ok=True)
+                            temp_in.unlink(missing_ok=True)
+                            if success:
+                                return True
+                        elif resp.status in (401, 429):
+                            logger.warning("ElevenLabs key quota/auth failed, rotating to next key...")
+                            continue
+                        else:
+                            logger.error("ElevenLabs STS status %s: %s", resp.status, await resp.text())
+            except Exception as err:
+                logger.warning("ElevenLabs STS exception: %s, rotating...", err)
+                continue
+
+    temp_in.unlink(missing_ok=True)
+    return False
+
+
 async def apply_voice_effect(input_path: Path, output_path: Path, effect_key: str) -> bool:
-    """Applies the selected voice effect with ultrafast FFmpeg flags."""
+    """Applies the selected voice effect (ElevenLabs AI or Studio DSP)."""
     effect = VOICE_EFFECTS.get(effect_key)
     if not effect:
         logger.error("Unknown effect: %s", effect_key)
         return False
 
+    # 1. ElevenLabs Speech-to-Speech AI
+    if "elevenlabs_id" in effect:
+        success = await convert_speech_to_speech_elevenlabs(input_path, effect["elevenlabs_id"], output_path)
+        if success and output_path.exists():
+            return True
+        logger.warning("ElevenLabs fallback to DSP...")
+        # Fallback to rich grandfather/deep DSP if API exhausted
+        effect_filter = "asetrate=48000*0.86,aresample=48000,atempo=1.162,vibrato=f=5.0:d=0.34,tremolo=f=4.6:d=0.22,equalizer=f=360:t=q:w=1.5:g=6.5"
+    else:
+        effect_filter = effect.get("filter", "")
+
+    # 2. Studio DSP Filter
     cmd = [
         "ffmpeg", "-y",
         "-i", str(input_path),
-        "-af", effect["filter"],
+        "-af", effect_filter,
         "-c:a", "libopus",
         "-b:a", "48k",
         "-application", "voip",
@@ -282,13 +398,10 @@ async def apply_ambience_effect(input_path: Path, output_path: Path, ambience_ke
 
 
 async def generate_tts(text: str, voice_key: str, output_path: Path, style: str = "natural") -> bool:
-    """
-    Generates natural, highly-expressive neural speech with broadcast studio acoustic warmth.
-    """
+    """Generates natural, highly-expressive neural speech with broadcast studio acoustic warmth."""
     voice_info = TTS_VOICES.get(voice_key, TTS_VOICES["uz_female"])
     voice_name = voice_info["voice"]
 
-    # Rate and pitch adjustments for natural human expressiveness
     rate = "+1%"
     pitch = "+1Hz"
 
@@ -304,7 +417,6 @@ async def generate_tts(text: str, voice_key: str, output_path: Path, style: str 
         temp_mp3 = output_path.with_suffix(".temp.mp3")
         await communicate.save(str(temp_mp3))
 
-        # Broadcast Studio EQ: Adds warm human chest presence + treble clarity
         studio_filter = (
             "equalizer=f=220:t=q:w=1.5:g=2.5,"
             "equalizer=f=3600:t=q:w=1.2:g=3.0,"
