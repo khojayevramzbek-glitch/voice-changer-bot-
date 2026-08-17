@@ -46,14 +46,15 @@ def get_voice_effects_keyboard(file_token: str, user_id: int, page: int = 1) -> 
     if row:
         buttons.append(row)
 
-    # Navigation buttons
-    nav_row = []
-    if page > 1:
-        nav_row.append(InlineKeyboardButton(text="⬅️ Oldingi", callback_data=f"page:{page-1}:{file_token}"))
-    nav_row.append(InlineKeyboardButton(text=f"📄 {page}/{total_pages}", callback_data="noop"))
-    if page < total_pages:
-        nav_row.append(InlineKeyboardButton(text="Keyingi ➡️", callback_data=f"page:{page+1}:{file_token}"))
-    buttons.append(nav_row)
+    # Navigation buttons (only if multiple pages exist)
+    if total_pages > 1:
+        nav_row = []
+        if page > 1:
+            nav_row.append(InlineKeyboardButton(text="⬅️ Oldingi", callback_data=f"page:{page-1}:{file_token}"))
+        nav_row.append(InlineKeyboardButton(text=f"📄 {page}/{total_pages}", callback_data="noop"))
+        if page < total_pages:
+            nav_row.append(InlineKeyboardButton(text="Keyingi ➡️", callback_data=f"page:{page+1}:{file_token}"))
+        buttons.append(nav_row)
 
     # Ambience and cancel
     buttons.append([
