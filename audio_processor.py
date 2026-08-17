@@ -293,8 +293,9 @@ async def convert_speech_to_speech_elevenlabs(input_audio: Path, voice_id: str, 
                     data.add_field(
                         "voice_settings",
                         json.dumps({
-                            "similarity_boost": 0.8,
-                            "stability": 0.5,
+                            "similarity_boost": 0.40,
+                            "stability": 0.45,
+                            "style": 0.0,
                             "use_speaker_boost": True
                         })
                     )
