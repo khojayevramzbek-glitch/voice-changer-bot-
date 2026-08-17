@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # 25+ Studio-Calibrated Professional Voice Effects
 VOICE_EFFECTS = {
-    # 🌟 ElevenLabs Neural AI Personas (State of the art)
+    # 🌟 ElevenLabs Neural AI Personas (State-of-the-Art Neural Speech-to-Speech)
     "ai_roger": {
         "uz": "👴 AI Qari Bobo (ElevenLabs)", "ru": "👴 AI Мудрый Дедушка (ElevenLabs)", "en": "👴 AI Roger Grandfather (ElevenLabs)",
         "elevenlabs_id": "CwhRBWXzGAHq8TQ4Fs17",
@@ -30,8 +30,32 @@ VOICE_EFFECTS = {
         "desc_ru": "100% естественный и приятный голос девушки / женщины",
         "desc_en": "Hyper-realistic sweet and natural young female voice"
     },
+    "ai_boss": {
+        "uz": "👑 AI Yo'g'on Erkak / Boss (Brian)", "ru": "👑 AI Босс / Глубокий Баритон", "en": "👑 AI Mafia Boss (Brian)",
+        "elevenlabs_id": "nPczCjzI2devNBz1zQrb",
+        "gender": "male",
+        "desc_uz": "Juda yo'g'on, salobatli va nufuzli katta boss ovozi",
+        "desc_ru": "Густой, авторитетный и низкий баритон босса",
+        "desc_en": "Heavy authoritative and deep movie boss baritone"
+    },
+    "ai_chipmunk": {
+        "uz": "🐿 AI Chipmunk Burunduk (AI)", "ru": "🐿 AI Бурундук Элвин (AI)", "en": "🐿 AI Chipmunk Alvin (AI)",
+        "elevenlabs_id": "TX3LPaxmHKxFdv7VOQHJ",
+        "mode": "chipmunk",
+        "desc_uz": "Kulgili va sho'x Alvin burunduk ovozi (AI Sifatli)",
+        "desc_ru": "Веселый и чистый голос бурундука Элвина через AI",
+        "desc_en": "Crystal clear animated chipmunk voice powered by AI"
+    },
+    "ai_child": {
+        "uz": "🧒 AI Kichkintoy Bola (Child AI)", "ru": "🧒 AI Ребенок / Малыш", "en": "🧒 AI Little Child (Kid AI)",
+        "elevenlabs_id": "AZnzlk1XvdvUeBnXmlld",
+        "mode": "child",
+        "desc_uz": "Kichkina 5-6 yoshli yoqimli bola ovozi",
+        "desc_ru": "Милый и естественный голос маленького ребенка",
+        "desc_en": "Adorable cute little kid / child persona"
+    },
     "ai_george": {
-        "uz": "🎬 AI Gollivud Diktor (ElevenLabs)", "ru": "🎬 AI Голливудский Диктор (ElevenLabs)", "en": "🎬 AI Cinema Narrator (ElevenLabs)",
+        "uz": "🎬 AI Gollivud Diktor (George)", "ru": "🎬 AI Голливудский Диктор", "en": "🎬 AI Cinema Narrator (George)",
         "elevenlabs_id": "JBFqnCBsd6RMkjVDRZzb",
         "gender": "male",
         "desc_uz": "Gollivud filmlari va treylerlaridagi chuqur diktor ovozi",
@@ -39,20 +63,36 @@ VOICE_EFFECTS = {
         "desc_en": "Deep cinematic movie narrator persona"
     },
     "ai_callum": {
-        "uz": "🦸‍♂️ AI Ekshn Qahramon (ElevenLabs)", "ru": "🦸‍♂️ AI Герой Экшна (ElevenLabs)", "en": "🦸‍♂️ AI Action Hero (ElevenLabs)",
+        "uz": "🦸‍♂️ AI Ekshn Qahramon (Callum)", "ru": "🦸‍♂️ AI Герой Экшна", "en": "🦸‍♂️ AI Action Hero (Callum)",
         "elevenlabs_id": "N2lVS1w4EtoT3dr4eOWO",
         "gender": "male",
         "desc_uz": "Ekshn filmlar va o'yinlardagi kuchli jangchi qahramon ovozi",
         "desc_ru": "Голос брутального героя экшн-фильмов и игр",
         "desc_en": "Intense action movie hero persona"
     },
-    "ai_lily": {
-        "uz": "👧 AI Madina (Mayin Qiz Ovozi)", "ru": "👧 AI Нежная Девушка (ElevenLabs)", "en": "👧 AI Lily (Sweet Female)",
-        "elevenlabs_id": "pFZP5JQG7iQjIQuC4Bku",
-        "gender": "female",
-        "desc_uz": "ElevenLabs sun'iy intellektining latofatli va nafis qiz ovozi",
-        "desc_ru": "Нежный и реалистичный женский голос ElevenLabs",
-        "desc_en": "Elegant seductive female persona"
+    "ai_radio": {
+        "uz": "🎙 AI Radio Boshlovchi (Will)", "ru": "🎙 AI Радио Ведущий", "en": "🎙 AI Radio Host (Will)",
+        "elevenlabs_id": "bIHbv24MWmeRgasZH58o",
+        "gender": "male",
+        "desc_uz": "Tiniq va energiyaga boy radio boshlovchisi ovozi",
+        "desc_ru": "Энергичный голос ведущего радиошоу",
+        "desc_en": "Lively and energetic radio DJ host"
+    },
+    "ai_monster": {
+        "uz": "👹 AI Kinematik Maxluq (AI)", "ru": "👹 AI Кино-Монстр", "en": "👹 AI Cinematic Monster",
+        "elevenlabs_id": "N2lVS1w4EtoT3dr4eOWO",
+        "post_filter": "asetrate=48000*0.72,aresample=48000,atempo=1.2,bass=g=12:f=100,aecho=0.8:0.6:40|80:0.3|0.2",
+        "desc_uz": "Qo'rqinchli chuqur bas maxluq ovozi (AI)",
+        "desc_ru": "Грозный глубокий голос монстра с эффектом эхо",
+        "desc_en": "Deep demonic creature with cinematic reverb"
+    },
+    "ai_robot": {
+        "uz": "🤖 AI Kiborg Robot (AI)", "ru": "🤖 AI Киборг Робот", "en": "🤖 AI Cyborg Robot",
+        "elevenlabs_id": "onwK4e9ZLuTAKqWW03F9",
+        "post_filter": "tremolo=f=40:d=0.9,chorus=0.7:0.9:25:0.4:0.25:2,equalizer=f=1400:t=q:w=1.2:g=7",
+        "desc_uz": "Kelajak kiborgi va Daft Punk robot ovozi",
+        "desc_ru": "Голос киборга будущего с вокодером",
+        "desc_en": "Futuristic cyborg vocoder sound"
     },
     # 👴 Elderly Grandfather (DSP): Natural aged vocal tremor, warm throat body and elderly cadence
     "old_man": {
@@ -270,7 +310,14 @@ def _run_ffmpeg_sync(cmd: list) -> bool:
         return False
 
 
-async def convert_speech_to_speech_elevenlabs(input_audio: Path, voice_id: str, output_path: Path, is_female: bool = False) -> bool:
+async def convert_speech_to_speech_elevenlabs(
+    input_audio: Path,
+    voice_id: str,
+    output_path: Path,
+    is_female: bool = False,
+    mode: Optional[str] = None,
+    post_filter: Optional[str] = None
+) -> bool:
     """
     Transforms any voice audio into realistic ElevenLabs AI personas with auto key-pool failover!
     """
@@ -280,13 +327,22 @@ async def convert_speech_to_speech_elevenlabs(input_audio: Path, voice_id: str, 
 
     url = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_id}"
 
-    # Prepare standard MP3 input (with female formant conversion if target is female)
+    # Prepare standard MP3 input with acoustic formant shifts
     temp_in = output_path.with_suffix(".in_sts.mp3")
     if is_female:
+        af_prep = "asetrate=44100*1.32,aresample=44100,atempo=0.757,equalizer=f=3200:t=q:w=1.5:g=4,highpass=f=200"
+    elif mode == "chipmunk":
+        af_prep = "asetrate=44100*1.45,aresample=44100,atempo=0.69,highpass=f=250"
+    elif mode == "child":
+        af_prep = "asetrate=44100*1.22,aresample=44100,atempo=0.82,equalizer=f=2800:t=q:w=1.5:g=3"
+    else:
+        af_prep = ""
+
+    if af_prep:
         cmd_prep = [
             "ffmpeg", "-y",
             "-i", str(input_audio),
-            "-af", "asetrate=44100*1.32,aresample=44100,atempo=0.757,equalizer=f=3200:t=q:w=1.5:g=4,highpass=f=200",
+            "-af", af_prep,
             "-vn",
             "-ac", "1",
             "-ar", "44100",
@@ -332,15 +388,20 @@ async def convert_speech_to_speech_elevenlabs(input_audio: Path, voice_id: str, 
                             with open(temp_out, "wb") as f_out:
                                 f_out.write(res_bytes)
 
-                            # Convert to Telegram native OGG Opus
-                            cmd_conv = [
-                                "ffmpeg", "-y",
-                                "-i", str(temp_out),
+                            # Build final output conversion with optional post filter
+                            cmd_conv = ["ffmpeg", "-y", "-i", str(temp_out)]
+                            if post_filter:
+                                cmd_conv.extend(["-af", post_filter])
+                            elif mode == "chipmunk":
+                                cmd_conv.extend(["-af", "asetrate=48000*1.18,aresample=48000,atempo=0.847"])
+
+                            cmd_conv.extend([
                                 "-c:a", "libopus",
                                 "-b:a", "64k",
                                 "-application", "voip",
                                 str(output_path)
-                            ]
+                            ])
+
                             success = _run_ffmpeg_sync(cmd_conv)
                             temp_out.unlink(missing_ok=True)
                             temp_in.unlink(missing_ok=True)
@@ -369,17 +430,20 @@ async def apply_voice_effect(input_path: Path, output_path: Path, effect_key: st
     # 1. ElevenLabs Speech-to-Speech AI
     if "elevenlabs_id" in effect:
         is_female = effect.get("gender") == "female"
+        mode = effect.get("mode")
+        post_filter = effect.get("post_filter")
         success = await convert_speech_to_speech_elevenlabs(
             input_path,
             effect["elevenlabs_id"],
             output_path,
-            is_female=is_female
+            is_female=is_female,
+            mode=mode,
+            post_filter=post_filter
         )
         if success and output_path.exists():
             return True
         logger.warning("ElevenLabs fallback to DSP...")
-        # Fallback to rich grandfather/deep DSP if API exhausted
-        effect_filter = "asetrate=48000*0.86,aresample=48000,atempo=1.162,vibrato=f=5.0:d=0.34,tremolo=f=4.6:d=0.22,equalizer=f=360:t=q:w=1.5:g=6.5"
+        effect_filter = effect.get("filter", "asetrate=48000*0.86,aresample=48000,atempo=1.162,vibrato=f=5.0:d=0.34,tremolo=f=4.6:d=0.22,equalizer=f=360:t=q:w=1.5:g=6.5")
     else:
         effect_filter = effect.get("filter", "")
 
