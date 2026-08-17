@@ -57,16 +57,15 @@ VOICE_EFFECTS = {
         "desc_ru": "100% естественный и приятный женский голос",
         "desc_en": "Hyper-realistic sweet and natural female voice"
     },
-    # 5. 🐿 Alvin Chipmunk (Liam - Squeaky crystal clear chipmunk)
+    # 5. 🐿 Alvin Chipmunk (Hollywood Cinema Studio Quality)
     "ai_chipmunk": {
         "uz": "🐿 Chipmunk (Alvin Burunduk)",
         "ru": "🐿 Бурундук Элвин",
         "en": "🐿 Alvin Chipmunk",
-        "elevenlabs_id": "TX3LPaxmHKxFdv7VOQHJ",
-        "mode": "chipmunk",
-        "desc_uz": "Kulgili, sho'x va tiniq Alvin burunduk ovozi",
-        "desc_ru": "Веселый и чистый голос бурундука Элвина",
-        "desc_en": "Crystal clear animated chipmunk voice"
+        "filter": "asetrate=48000*1.65,aresample=48000,atempo=0.606,equalizer=f=3400:t=q:w=1.4:g=6.5,equalizer=f=1200:t=q:w=1.8:g=3.0,highpass=f=260,treble=g=4.5,compand=0.02|0.05:0.1|0.1:-60/-60|-25/-12|0/-1:5:0:0:0.02,volume=1.3",
+        "desc_uz": "Kulgili, sho'x va haqiqiy filmlardagi Alvin burunduk ovozi",
+        "desc_ru": "Знаменитый веселый и чистый голос бурундука Элвина из фильма",
+        "desc_en": "Authentic movie-quality Alvin and the Chipmunks voice"
     },
     # 6. 🎬 Hollywood Cinema Narrator (George - Warm captivating movie trailer voice)
     "ai_cinema": {
@@ -256,12 +255,26 @@ async def convert_speech_to_speech_elevenlabs(
 
 
 async def apply_voice_effect(input_path: Path, output_path: Path, effect_key: str) -> bool:
-    """Applies the selected voice effect via ElevenLabs AI."""
+    """Applies the selected voice effect via ElevenLabs AI or Hollywood DSP filter."""
     effect = VOICE_EFFECTS.get(effect_key)
     if not effect:
         logger.error("Unknown effect: %s", effect_key)
         return False
 
+    # 1. Hollywood Cinema DSP (like Alvin Chipmunk)
+    if "filter" in effect:
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(input_path),
+            "-af", effect["filter"],
+            "-c:a", "libopus",
+            "-b:a", "64k",
+            "-application", "voip",
+            str(output_path)
+        ]
+        return await asyncio.to_thread(_run_ffmpeg_sync, cmd)
+
+    # 2. ElevenLabs Neural AI Speech-to-Speech
     voice_id = effect.get("elevenlabs_id", "pqHfZKP75CvOlQylNhV4")
     mode = effect.get("mode")
     return await convert_speech_to_speech_elevenlabs(
